@@ -1,0 +1,12 @@
+[package]
+name = "sysml-run-statemachine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "State machine compilation and execution for SysML v2"
+
+[dependencies]
+sysml-run = { workspace = true }
+sysml-core = { workspace = true }
+sysml-query = { workspace = true }
+sysml-span = { workspace = true }

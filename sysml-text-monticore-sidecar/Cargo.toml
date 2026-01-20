@@ -1,0 +1,11 @@
+[package]
+name = "sysml-text-monticore-sidecar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "MontiCore parser adapter for SysML v2 (JVM/HTTP sidecar)"
+
+[dependencies]
+sysml-text = { workspace = true }
+sysml-core = { workspace = true }
+sysml-span = { workspace = true }

@@ -1,0 +1,23 @@
+[package]
+name = "sysml-id"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Element identifiers, qualified names, and project/commit IDs for SysML v2"
+
+[features]
+default = ["uuid"]
+uuid = ["dep:uuid"]
+serde = ["dep:serde", "uuid?/serde"]
+
+[dependencies]
+uuid = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "id_benchmarks"
+harness = false

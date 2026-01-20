@@ -1,0 +1,15 @@
+[package]
+name = "sysml-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LSP protocol types and conversions for SysML v2"
+
+[features]
+default = []
+linking = ["sysml-core"]
+
+[dependencies]
+sysml-span = { workspace = true }
+sysml-id = { workspace = true }
+sysml-core = { workspace = true, optional = true }

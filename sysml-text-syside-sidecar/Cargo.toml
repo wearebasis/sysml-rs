@@ -1,0 +1,11 @@
+[package]
+name = "sysml-text-syside-sidecar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SySide parser adapter for SysML v2 (Node.js sidecar)"
+
+[dependencies]
+sysml-text = { workspace = true }
+sysml-core = { workspace = true }
+sysml-span = { workspace = true }

@@ -1,0 +1,384 @@
+//! Build script for sysml-core.
+//!
+//! This script generates:
+//! 1. The `ElementKind` enum from KerML and SysML vocabulary TTL files
+//! 2. Type hierarchy methods (supertypes, predicates, definition/usage mappings)
+//! 3. Relationship source/target constraint methods (from JSON schemas)
+//! 4. Value enumeration types (FeatureDirectionKind, VisibilityKind, etc.)
+//! 5. Typed property accessors from OSLC shapes files
+//!
+//! ## Spec Coverage Validation
+//!
+//! The build script validates that the generated code has complete coverage
+//! of the SysML v2 / KerML specifications by cross-checking multiple sources:
+//! - TTL vocabulary files vs XMI metamodel files (type coverage)
+//! - TTL enum values vs JSON schema enum values (enum coverage)
+//!
+//! The build will **fail** if:
+//! - Types exist in XMI but not in TTL (or vice versa)
+//! - Enum values differ between TTL and JSON schema
+
+use std::collections::HashSet;
+use std::env;
+use std::fs;
+use std::path::Path;
+
+fn main() {
+    // Determine paths relative to the manifest directory
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let repo_root = Path::new(&manifest_dir).join("..");
+    let spec_dir = repo_root.join("spec");
+    let refs_dir = if spec_dir.exists() {
+        spec_dir
+    } else {
+        repo_root.join("..").join("sysmlv2-references")
+    };
+
+    let kerml_vocab_path = refs_dir.join("Kerml-Vocab.ttl");
+    let sysml_vocab_path = refs_dir.join("SysML-vocab.ttl");
+    let kerml_shapes_path = refs_dir.join("KerML-shapes.ttl");
+    let sysml_shapes_path = refs_dir.join("SysML-shapes.ttl");
+    let json_schema_dir = if refs_dir.join("metamodel").is_dir() {
+        refs_dir.join("metamodel")
+    } else {
+        refs_dir.join("SysML-v2-API-Services/conf/json/schema/metamodel")
+    };
+    let kerml_xmi_path = refs_dir.join("KerML/20250201/KerML.xmi");
+    let sysml_xmi_path = refs_dir.join("SysML/20250201/SysML.xmi");
+
+    // Re-run if any source files change
+    println!("cargo:rerun-if-changed={}", kerml_vocab_path.display());
+    println!("cargo:rerun-if-changed={}", sysml_vocab_path.display());
+    println!("cargo:rerun-if-changed={}", kerml_shapes_path.display());
+    println!("cargo:rerun-if-changed={}", sysml_shapes_path.display());
+    println!("cargo:rerun-if-changed={}", json_schema_dir.display());
+    // XMI files for relationship constraints (authoritative source)
+    println!("cargo:rerun-if-changed={}", kerml_xmi_path.display());
+    println!("cargo:rerun-if-changed={}", sysml_xmi_path.display());
+    println!("cargo:rerun-if-changed=build.rs");
+
+    // Read the vocabulary files
+    let kerml_vocab_content = fs::read_to_string(&kerml_vocab_path)
+        .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", kerml_vocab_path, e));
+    let sysml_vocab_content = fs::read_to_string(&sysml_vocab_path)
+        .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", sysml_vocab_path, e));
+
+    // Parse the vocabularies (types)
+    let kerml_types = sysml_codegen::parse_ttl_vocab(&kerml_vocab_content)
+        .unwrap_or_else(|e| panic!("Failed to parse KerML vocab: {}", e));
+    let sysml_types = sysml_codegen::parse_ttl_vocab(&sysml_vocab_content)
+        .unwrap_or_else(|e| panic!("Failed to parse SysML vocab: {}", e));
+
+    // Parse the vocabularies (enums)
+    let kerml_enums = sysml_codegen::parse_ttl_enums(&kerml_vocab_content)
+        .unwrap_or_else(|e| panic!("Failed to parse KerML enums: {}", e));
+    let sysml_enums = sysml_codegen::parse_ttl_enums(&sysml_vocab_content)
+        .unwrap_or_else(|e| panic!("Failed to parse SysML enums: {}", e));
+
+    // Merge enums from both sources (deduplicating)
+    let all_enums = sysml_codegen::merge_enum_info(kerml_enums.clone(), sysml_enums.clone());
+
+    println!(
+        "cargo:warning=Parsed {} KerML enums and {} SysML enums, merged to {} unique enums",
+        kerml_enums.len(),
+        sysml_enums.len(),
+        all_enums.len()
+    );
+
+    // =====================================================================
+    // SPEC COVERAGE VALIDATION
+    // =====================================================================
+    // Validate that our codegen pipeline has complete coverage of the spec
+    // by cross-checking multiple authoritative sources.
+    //
+    // The build will FAIL if:
+    // - Types exist in XMI but not in TTL (or vice versa)
+    // - Enum values differ between TTL and JSON schema
+    // =====================================================================
+
+    // Parse XMI classes for type coverage validation
+    let xmi_classes = sysml_codegen::parse_all_xmi_classes(&kerml_xmi_path, &sysml_xmi_path)
+        .unwrap_or_else(|e| panic!("Failed to parse XMI classes: {}", e));
+
+    // Collect TTL type names for validation
+    // Exclude enum types (names ending with "Kind") since they are defined as
+    // uml:Enumeration in XMI, not uml:Class, so they won't be in xmi_classes
+    let ttl_type_names: Vec<String> = kerml_types
+        .iter()
+        .chain(sysml_types.iter())
+        .filter(|t| !t.name.ends_with("Kind"))
+        .map(|t| t.name.clone())
+        .collect();
+
+    // Validate type coverage (TTL vs XMI)
+    let type_report = sysml_codegen::validate_type_coverage(&ttl_type_names, &xmi_classes);
+
+    println!(
+        "cargo:warning=Type coverage: {} TTL, {} XMI, {} matched",
+        type_report.ttl_total, type_report.xmi_total, type_report.matched_count
+    );
+
+    if type_report.has_errors() {
+        if !type_report.ttl_only.is_empty() {
+            println!(
+                "cargo:warning=Types in TTL but not XMI ({}): {:?}",
+                type_report.ttl_only.len(),
+                type_report.ttl_only
+            );
+        }
+        if !type_report.xmi_only.is_empty() {
+            println!(
+                "cargo:warning=Types in XMI but not TTL ({}): {:?}",
+                type_report.xmi_only.len(),
+                type_report.xmi_only
+            );
+        }
+        // Fail the build on type coverage errors
+        panic!(
+            "TYPE COVERAGE VALIDATION FAILED: {} errors\n\
+             TTL-only types: {:?}\n\
+             XMI-only types: {:?}",
+            type_report.error_count(),
+            type_report.ttl_only,
+            type_report.xmi_only
+        );
+    }
+
+    // Parse JSON enums for enum coverage validation
+    let json_enums = sysml_codegen::parse_all_enums_from_json(&json_schema_dir);
+
+    // Convert TTL enums to the format needed for validation
+    let ttl_enums_for_validation: Vec<(String, Vec<String>)> = all_enums
+        .iter()
+        .map(|e| (e.name.clone(), e.values.iter().map(|v| v.name.clone()).collect()))
+        .collect();
+
+    // Convert JSON enums to the format needed for validation
+    let json_enums_for_validation: Vec<(String, Vec<String>)> = json_enums
+        .iter()
+        .map(|e| (e.name.clone(), e.values.clone()))
+        .collect();
+
+    // Validate enum coverage (TTL vs JSON)
+    let enum_report =
+        sysml_codegen::validate_enum_coverage(&ttl_enums_for_validation, &json_enums_for_validation);
+
+    println!(
+        "cargo:warning=Enum coverage: {} TTL enums, {} JSON enums",
+        ttl_enums_for_validation.len(),
+        json_enums_for_validation.len()
+    );
+
+    if enum_report.has_errors() {
+        let mut error_details = String::new();
+        if !enum_report.ttl_only_enums.is_empty() {
+            error_details.push_str(&format!(
+                "Enums in TTL but not JSON: {:?}\n",
+                enum_report.ttl_only_enums
+            ));
+        }
+        if !enum_report.json_only_enums.is_empty() {
+            error_details.push_str(&format!(
+                "Enums in JSON but not TTL: {:?}\n",
+                enum_report.json_only_enums
+            ));
+        }
+        for enum_val in &enum_report.enums {
+            if !enum_val.is_valid() {
+                error_details.push_str(&format!(
+                    "{}: TTL-only values {:?}, JSON-only values {:?}\n",
+                    enum_val.name, enum_val.ttl_only, enum_val.json_only
+                ));
+            }
+        }
+        // Fail the build on enum coverage errors
+        panic!(
+            "ENUM COVERAGE VALIDATION FAILED: {} errors\n{}",
+            enum_report.error_count(),
+            error_details
+        );
+    }
+
+    println!("cargo:warning=Spec coverage validation PASSED");
+
+    // =====================================================================
+    // CODE GENERATION
+    // =====================================================================
+
+    // Generate the ElementKind enum
+    let enum_code = sysml_codegen::generate_enum("ElementKind", &kerml_types, &sysml_types);
+
+    // Generate type hierarchy methods
+    let hierarchy_code = sysml_codegen::generate_hierarchy_methods(&kerml_types, &sysml_types);
+
+    // Get list of relationship types from the type hierarchy (deduplicated)
+    let hierarchy_map = sysml_codegen::inheritance::build_type_hierarchy(&kerml_types, &sysml_types);
+    let relationship_type_set: HashSet<&str> = kerml_types
+        .iter()
+        .chain(sysml_types.iter())
+        .filter(|t| {
+            t.name == "Relationship"
+                || hierarchy_map
+                    .get(&t.name)
+                    .map_or(false, |supers| supers.contains(&"Relationship".to_string()))
+        })
+        .map(|t| t.name.as_str())
+        .collect();
+    let relationship_type_names: Vec<&str> = relationship_type_set.into_iter().collect();
+
+    // Parse XMI files for relationship constraints (authoritative source)
+    // Note: kerml_xmi_path and sysml_xmi_path are already declared in spec validation section
+    let xmi_constraints = sysml_codegen::parse_relationship_constraints(
+        &kerml_xmi_path,
+        &sysml_xmi_path,
+    ).unwrap_or_else(|e| panic!("Failed to parse XMI relationship constraints: {}", e));
+
+    // Validate coverage
+    let fallback_names = sysml_codegen::get_fallback_constraint_names();
+    let coverage = sysml_codegen::validate_relationship_coverage(
+        &relationship_type_names,
+        &xmi_constraints,
+        &fallback_names,
+    );
+
+    println!(
+        "cargo:warning=Relationship constraints: {}/{} from XMI, {} from fallback",
+        coverage.from_xmi, coverage.total, coverage.from_fallback
+    );
+
+    if !coverage.missing.is_empty() {
+        println!(
+            "cargo:warning=Relationship types without constraints (using default Element): {:?}",
+            coverage.missing
+        );
+    }
+
+    // Generate relationship constraint methods with XMI-parsed constraints
+    let relationship_code = sysml_codegen::generate_relationship_methods_with_xmi(
+        &kerml_types,
+        &sysml_types,
+        &xmi_constraints,
+    );
+
+    // Combine all ElementKind-related code
+    let element_kind_code = format!(
+        "{}\n{}\n{}",
+        enum_code, hierarchy_code, relationship_code
+    );
+
+    // Collect valid element kinds for filtering
+    let mut valid_kinds: HashSet<String> = HashSet::new();
+    for t in &kerml_types {
+        valid_kinds.insert(t.name.clone());
+    }
+    for t in &sysml_types {
+        valid_kinds.insert(t.name.clone());
+    }
+
+    // Write ElementKind enum and methods
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
+    let enum_path = Path::new(&out_dir).join("element_kind.generated.rs");
+    fs::write(&enum_path, &element_kind_code)
+        .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", enum_path, e));
+
+    // Generate value enums
+    let enums_code = sysml_codegen::generate_value_enums(&all_enums);
+    let enums_path = Path::new(&out_dir).join("enums.generated.rs");
+    fs::write(&enums_path, &enums_code)
+        .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", enums_path, e));
+
+    println!(
+        "cargo:warning=Generated ElementKind enum with {} KerML and {} SysML types",
+        kerml_types.len(),
+        sysml_types.len()
+    );
+    println!(
+        "cargo:warning=Generated {} value enumeration types",
+        all_enums.len()
+    );
+
+    // Now parse shapes files for property accessors
+    let kerml_shapes_content = fs::read_to_string(&kerml_shapes_path)
+        .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", kerml_shapes_path, e));
+    let sysml_shapes_content = fs::read_to_string(&sysml_shapes_path)
+        .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", sysml_shapes_path, e));
+
+    // Parse KerML shapes
+    let (mut kerml_shapes, kerml_shared_props) =
+        sysml_codegen::shapes_parser::parse_oslc_shapes(&kerml_shapes_content)
+            .unwrap_or_else(|e| panic!("Failed to parse KerML shapes: {}", e));
+
+    // Resolve shared properties for KerML
+    sysml_codegen::shapes_parser::resolve_shared_properties(&mut kerml_shapes, &kerml_shared_props);
+
+    // Parse SysML shapes
+    let (mut sysml_shapes, sysml_shared_props) =
+        sysml_codegen::shapes_parser::parse_oslc_shapes(&sysml_shapes_content)
+            .unwrap_or_else(|e| panic!("Failed to parse SysML shapes: {}", e));
+
+    // Resolve shared properties for SysML
+    sysml_codegen::shapes_parser::resolve_shared_properties(&mut sysml_shapes, &sysml_shared_props);
+
+    // Merge all shared properties (KerML ones might be referenced by SysML)
+    let mut all_shared_props = kerml_shared_props;
+    all_shared_props.extend(sysml_shared_props);
+
+    // Also resolve SysML shapes with KerML shared properties
+    sysml_codegen::shapes_parser::resolve_shared_properties(&mut sysml_shapes, &all_shared_props);
+
+    // Combine shapes
+    let mut all_shapes = kerml_shapes;
+    all_shapes.extend(sysml_shapes);
+
+    println!(
+        "cargo:warning=Parsed {} shapes ({} KerML, {} SysML) with {} shared properties",
+        all_shapes.len(),
+        all_shapes.iter().filter(|s| s.element_type.starts_with(|c: char| c.is_uppercase())).count(),
+        all_shapes.len(),
+        all_shared_props.len()
+    );
+
+    // Build type hierarchy for inheritance resolution
+    let type_hierarchy =
+        sysml_codegen::inheritance::build_type_hierarchy(&kerml_types, &sysml_types);
+
+    // Resolve property inheritance
+    let resolved_shapes =
+        sysml_codegen::inheritance::resolve_inheritance(&all_shapes, &type_hierarchy);
+
+    // Filter to only shapes that have corresponding ElementKind variants
+    let valid_kinds_vec: Vec<String> = valid_kinds.into_iter().collect();
+    let filtered_resolved: std::collections::HashMap<_, _> = resolved_shapes
+        .into_iter()
+        .filter(|(k, _)| valid_kinds_vec.contains(k))
+        .collect();
+
+    println!(
+        "cargo:warning=Generating accessors for {} shapes with valid ElementKind",
+        filtered_resolved.len()
+    );
+
+    // Generate property accessors
+    let accessor_code =
+        sysml_codegen::accessor_generator::generate_property_accessors(&filtered_resolved);
+
+    // Generate validation methods
+    let validation_code =
+        sysml_codegen::validation_generator::generate_validation_methods(&filtered_resolved);
+
+    // Combine into properties.generated.rs
+    let mut properties_code = String::new();
+    properties_code.push_str(&accessor_code);
+    properties_code.push_str("\n// Validation methods\n\n");
+    properties_code.push_str(&validation_code);
+
+    // Write properties file
+    let props_path = Path::new(&out_dir).join("properties.generated.rs");
+    fs::write(&props_path, &properties_code)
+        .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", props_path, e));
+
+    println!(
+        "cargo:warning=Generated property accessors in {:?}",
+        props_path
+    );
+}

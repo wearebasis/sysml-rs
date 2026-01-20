@@ -1,0 +1,9 @@
+[package]
+name = "sysml-ts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tree-sitter based CST parsing for SysML v2 (IDE-focused, fast)"
+
+[dependencies]
+sysml-span = { workspace = true }

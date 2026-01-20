@@ -1,0 +1,12 @@
+[package]
+name = "sysml-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Storage trait and types for SysML v2 model snapshots"
+
+[dependencies]
+sysml-core = { workspace = true }
+sysml-canon = { workspace = true }
+sysml-id = { workspace = true }
+thiserror = { workspace = true }

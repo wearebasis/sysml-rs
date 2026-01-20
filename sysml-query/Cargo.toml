@@ -1,0 +1,9 @@
+[package]
+name = "sysml-query"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Query functions for SysML v2 ModelGraph"
+
+[dependencies]
+sysml-core = { workspace = true }

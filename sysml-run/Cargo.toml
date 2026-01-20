@@ -1,0 +1,10 @@
+[package]
+name = "sysml-run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Execution runtime traits and IR types for SysML v2"
+
+[dependencies]
+sysml-core = { workspace = true }
+sysml-span = { workspace = true }
