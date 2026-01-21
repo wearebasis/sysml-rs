@@ -1,0 +1,80 @@
+// =============================================================================
+// ENTRY POINT
+// =============================================================================
+
+// Main entry point - a file can contain package body elements
+File = { SOI ~ PackageBodyElement* ~ EOI }
+
+// Alternative entry point for testing
+Model = { SOI ~ PackageBodyElement* ~ EOI }
+
+// =============================================================================
+// PACKAGES
+// =============================================================================
+
+Package = {
+    PrefixMetadata? ~ KW_PACKAGE ~ Identification? ~ PackageBody
+}
+
+LibraryPackage = {
+    Standard? ~ KW_LIBRARY ~ PrefixMetadata? ~ KW_PACKAGE ~ Identification? ~ PackageBody
+}
+
+PackageBody = { ";" | "{" ~ PackageBodyElement* ~ "}" }
+
+PackageBodyElement = {
+    Import
+    | AliasMember
+    | ElementFilterMember
+    | AnnotatingMember
+    | UsageMember
+    | DefinitionMember
+    | RelationshipMember
+}
+
+// =============================================================================
+// IMPORTS
+// =============================================================================
+
+Import = {
+    ImportPrefix ~ ImportedReference ~ FilterPackage? ~ RelationshipBody
+}
+
+ImportPrefix = { Visibility? ~ KW_IMPORT ~ ImportAll? }
+
+ImportedReference = {
+    QualifiedName ~ ImportNamespaceMarker? ~ ImportRecursiveMarker?
+}
+
+ImportNamespaceMarker = { "::*" }
+ImportRecursiveMarker = { "::**" }
+
+FilterPackage = { FilterPackageMember+ }
+
+FilterPackageMember = { "[" ~ OwnedExpression ~ "]" }
+
+// =============================================================================
+// MEMBERS
+// =============================================================================
+
+AliasMember = {
+    Visibility? ~ KW_ALIAS ~ Identification? ~ KW_FOR ~ QualifiedName ~ RelationshipBody
+}
+
+ElementFilterMember = {
+    Visibility? ~ KW_FILTER ~ OwnedExpression ~ ";"
+}
+
+AnnotatingMember = { Visibility? ~ AnnotatingElement }
+
+UsageMember = { Visibility? ~ UsageElement }
+
+DefinitionMember = { Visibility? ~ DefinitionElement }
+
+RelationshipMember = { Visibility? ~ Dependency }
+
+VariantUsageMember = { Visibility? ~ KW_VARIANT ~ VariantUsageElement }
+
+NonOccurrenceUsageMember = { Visibility? ~ NonOccurrenceUsageElement }
+
+OccurrenceUsageMember = { Visibility? ~ OccurrenceUsageElement }

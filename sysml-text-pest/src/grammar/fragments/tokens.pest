@@ -1,0 +1,36 @@
+// =============================================================================
+// TOKENS (Composite tokens that reference keywords)
+// =============================================================================
+
+// Specialization tokens
+SpecializesToken = { ":>" | KW_SPECIALIZES }
+SubsetsToken = { ":>" | KW_SUBSETS }
+ReferencesToken = { "::>" | KW_REFERENCES }
+CrossesToken = { "=>" | KW_CROSSES }
+RedefinesToken = { ":>>" | KW_REDEFINES }
+TypedByToken = { ":" | (KW_TYPED ~ KW_BY) }
+DefinedByToken = { ":" | (KW_DEFINED ~ KW_BY) }
+ConjugatesToken = { "~" | KW_CONJUGATES }
+
+// Import kind
+ImportKind = { "::*::**" | "::**" | "::*" }
+
+// =============================================================================
+// COMMON FRAGMENTS
+// =============================================================================
+
+Abstract = { KW_ABSTRACT }
+Visibility = { VisibilityKind }
+Readonly = { KW_READONLY }
+Derived = { KW_DERIVED }
+End = { KW_END }
+Sufficient = { KW_ALL }
+Standard = { KW_STANDARD }
+ImportAll = { KW_ALL }
+Variation = { KW_VARIATION }
+Individual = { KW_INDIVIDUAL }
+
+MultiplicityProperties = {
+    (KW_ORDERED ~ KW_NONUNIQUE?)
+    | (KW_NONUNIQUE ~ KW_ORDERED?)
+}

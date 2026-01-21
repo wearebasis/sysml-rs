@@ -1,0 +1,277 @@
+// =============================================================================
+// DEFINITIONS
+// =============================================================================
+
+DefinitionElement = {
+    Package
+    | LibraryPackage
+    | AttributeDefinition
+    | EnumerationDefinition
+    | OccurrenceDefinition
+    | ItemDefinition
+    | MetadataDefinition
+    | PartDefinition
+    | ConnectionDefinition
+    | FlowConnectionDefinition
+    | InterfaceDefinition
+    | AllocationDefinition
+    | PortDefinition
+    | ActionDefinition
+    | CalculationDefinition
+    | StateDefinition
+    | ConstraintDefinition
+    | RequirementDefinition
+    | ConcernDefinition
+    | CaseDefinition
+    | AnalysisCaseDefinition
+    | VerificationCaseDefinition
+    | UseCaseDefinition
+    | ViewDefinition
+    | ViewpointDefinition
+    | RenderingDefinition
+    | ExtendedDefinition
+}
+
+DefinitionPrefix = { BasicDefinitionPrefix? ~ DefinitionExtensionKeyword* }
+BasicDefinitionPrefix = { Abstract | Variation }
+DefinitionExtensionKeyword = { PrefixMetadataMember }
+
+DefinitionDeclaration = { Identification? ~ SubclassificationPart? }
+
+DefinitionBody = { ";" | "{" ~ DefinitionBodyItem* ~ "}" }
+
+DefinitionBodyItem = {
+    Import
+    | AliasMember
+    | AnnotatingMember
+    | RelationshipMember
+    | DefinitionMember
+    | VariantUsageMember
+    | NonOccurrenceUsageMember
+    | OccurrenceUsageMember
+}
+
+// Subclassification
+SubclassificationPart = {
+    SpecializesToken ~ OwnedSubclassification ~ ("," ~ OwnedSubclassification)*
+}
+
+OwnedSubclassification = { QualifiedName }
+
+// Specific definitions
+AttributeDefinition = {
+    DefinitionPrefix ~ KW_ATTRIBUTE ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+EnumerationDefinition = {
+    PrefixMetadata? ~ KW_ENUM ~ KW_DEF ~ DefinitionDeclaration ~ EnumerationBody
+}
+
+EnumerationBody = { ";" | "{" ~ EnumerationBodyItem* ~ "}" }
+
+EnumerationBodyItem = {
+    AnnotatingMember
+    | EnumerationUsageMember
+}
+
+EnumerationUsageMember = { Visibility? ~ EnumeratedValue }
+
+EnumeratedValue = { PrefixMetadata? ~ KW_ENUM? ~ UsageDeclaration? ~ UsageCompletion }
+
+OccurrenceDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_OCCURRENCE ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+OccurrenceDefinitionPrefix = {
+    BasicDefinitionPrefix? ~ Individual? ~ DefinitionExtensionKeyword*
+}
+
+ItemDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_ITEM ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+MetadataDefinition = {
+    Abstract? ~ PrefixMetadata? ~ KW_METADATA ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+PartDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_PART ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+PortDefinition = {
+    DefinitionPrefix ~ KW_PORT ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+ConnectionDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_CONNECTION ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+FlowConnectionDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_FLOW ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+InterfaceDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_INTERFACE ~ KW_DEF ~ DefinitionDeclaration ~ InterfaceBody
+}
+
+InterfaceBody = { ";" | "{" ~ InterfaceBodyItem* ~ "}" }
+
+InterfaceBodyItem = { DefinitionBodyItem }
+
+AllocationDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_ALLOCATION ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+ActionDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_ACTION ~ KW_DEF ~ DefinitionDeclaration ~ ActionBody
+}
+
+ActionBody = { ";" | "{" ~ ActionBodyItem* ~ "}" }
+
+ActionBodyItem = {
+    DefinitionBodyItem
+    | InitialNodeMember
+    | ControlNodeMember
+    | ActionNodeMember
+}
+
+InitialNodeMember = { Visibility? ~ KW_FIRST ~ QualifiedName ~ RelationshipBody }
+
+ControlNodeMember = { Visibility? ~ ControlNode }
+
+ActionNodeMember = { Visibility? ~ ActionNode }
+
+StateDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_STATE ~ KW_DEF ~ DefinitionDeclaration ~ StateBody
+}
+
+StateBody = { ";" | KW_PARALLEL? ~ "{" ~ StateBodyItem* ~ "}" }
+
+StateBodyItem = {
+    DefinitionBodyItem
+    | EntryActionMember
+    | DoActionMember
+    | ExitActionMember
+    | TransitionUsageMember
+}
+
+EntryActionMember = { Visibility? ~ KW_ENTRY ~ StateActionUsage }
+DoActionMember = { Visibility? ~ KW_DO ~ StateActionUsage }
+ExitActionMember = { Visibility? ~ KW_EXIT ~ StateActionUsage }
+
+StateActionUsage = { ";" | UsageDeclaration? ~ ActionBody }
+
+TransitionUsageMember = { Visibility? ~ TransitionUsage }
+
+CalculationDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_CALC ~ KW_DEF ~ DefinitionDeclaration ~ CalculationBody
+}
+
+CalculationBody = { ";" | "{" ~ CalculationBodyItem* ~ ResultExpressionMember? ~ "}" }
+
+CalculationBodyItem = {
+    ActionBodyItem
+    | ReturnParameterMember
+}
+
+ReturnParameterMember = { Visibility? ~ KW_RETURN ~ UsageElement }
+
+ResultExpressionMember = { Visibility? ~ OwnedExpression }
+
+ConstraintDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_CONSTRAINT ~ KW_DEF ~ DefinitionDeclaration ~ CalculationBody
+}
+
+RequirementDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_REQUIREMENT ~ KW_DEF ~ DefinitionDeclaration ~ RequirementBody
+}
+
+RequirementBody = { ";" | "{" ~ RequirementBodyItem* ~ "}" }
+
+RequirementBodyItem = {
+    DefinitionBodyItem
+    | SubjectMember
+    | RequirementConstraintMember
+    | ActorMember
+    | StakeholderMember
+}
+
+SubjectMember = { Visibility? ~ KW_SUBJECT ~ SubjectUsage }
+SubjectUsage = { UsageDeclaration? ~ UsageCompletion }
+
+RequirementConstraintMember = {
+    Visibility? ~ RequirementConstraintKind ~ RequirementConstraintUsage
+}
+// Note: RequirementConstraintKind is generated from xtext enums
+RequirementConstraintUsage = {
+    OwnedReferenceSubsetting ~ FeatureSpecialization* ~ CalculationBody
+    | UsageDeclaration? ~ CalculationBody
+}
+
+ActorMember = { Visibility? ~ KW_ACTOR ~ ActorUsage }
+ActorUsage = { UsageDeclaration? ~ UsageCompletion }
+
+StakeholderMember = { Visibility? ~ KW_STAKEHOLDER ~ StakeholderUsage }
+StakeholderUsage = { UsageDeclaration? ~ UsageCompletion }
+
+ConcernDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_CONCERN ~ KW_DEF ~ DefinitionDeclaration ~ RequirementBody
+}
+
+CaseDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_CASE ~ KW_DEF ~ DefinitionDeclaration ~ CaseBody
+}
+
+CaseBody = { ";" | "{" ~ CaseBodyItem* ~ ResultExpressionMember? ~ "}" }
+
+CaseBodyItem = {
+    CalculationBodyItem
+    | SubjectMember
+    | ActorMember
+    | ObjectiveMember
+}
+
+ObjectiveMember = { Visibility? ~ KW_OBJECTIVE ~ ObjectiveRequirementUsage }
+ObjectiveRequirementUsage = { UsageDeclaration? ~ RequirementBody }
+
+AnalysisCaseDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_ANALYSIS ~ KW_DEF ~ DefinitionDeclaration ~ CaseBody
+}
+
+VerificationCaseDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_VERIFICATION ~ KW_DEF ~ DefinitionDeclaration ~ CaseBody
+}
+
+UseCaseDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_USE ~ KW_CASE ~ KW_DEF ~ DefinitionDeclaration ~ CaseBody
+}
+
+ViewDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_VIEW ~ KW_DEF ~ DefinitionDeclaration ~ ViewBody
+}
+
+ViewBody = { ";" | "{" ~ ViewBodyItem* ~ "}" }
+
+ViewBodyItem = {
+    DefinitionBodyItem
+    | ElementFilterMember
+    | ViewRenderingMember
+}
+
+ViewRenderingMember = { Visibility? ~ KW_RENDER ~ ViewRenderingUsage }
+ViewRenderingUsage = {
+    OwnedReferenceSubsetting ~ FeatureSpecialization* ~ UsageBody
+    | UsageDeclaration? ~ UsageCompletion
+}
+
+ViewpointDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_VIEWPOINT ~ KW_DEF ~ DefinitionDeclaration ~ RequirementBody
+}
+
+RenderingDefinition = {
+    OccurrenceDefinitionPrefix ~ KW_RENDERING ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+ExtendedDefinition = {
+    BasicDefinitionPrefix? ~ DefinitionExtensionKeyword+ ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}

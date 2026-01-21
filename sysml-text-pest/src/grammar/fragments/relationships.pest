@@ -1,0 +1,16 @@
+// =============================================================================
+// RELATIONSHIPS (Dependencies)
+// =============================================================================
+
+Dependency = {
+    PrefixMetadataAnnotation* ~ KW_DEPENDENCY ~ (Identification? ~ KW_FROM)? ~
+    QualifiedName ~ ("," ~ QualifiedName)* ~ KW_TO ~
+    QualifiedName ~ ("," ~ QualifiedName)* ~
+    RelationshipBody
+}
+
+PrefixMetadataAnnotation = { PrefixMetadataUsage }
+
+RelationshipBody = { ";" | "{" ~ RelationshipBodyElement* ~ "}" }
+
+RelationshipBodyElement = { AnnotatingMember }

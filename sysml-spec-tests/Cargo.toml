@@ -1,0 +1,20 @@
+[package]
+name = "sysml-spec-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Parser coverage validation tests for SysML v2"
+
+[dependencies]
+sysml-text-pest = { workspace = true, features = ["coverage"] }
+sysml-text = { workspace = true }
+sysml-core = { workspace = true }
+sysml-codegen = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[features]
+default = []

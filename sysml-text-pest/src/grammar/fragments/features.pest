@@ -1,0 +1,81 @@
+// =============================================================================
+// FEATURES
+// =============================================================================
+
+FeatureDeclaration = {
+    Identification ~ FeatureSpecializationPart?
+    | FeatureSpecializationPart
+}
+
+FeatureSpecializationPart = {
+    FeatureSpecialization+ ~ (MultiplicityPart ~ FeatureSpecialization*)?
+    | MultiplicityPart ~ FeatureSpecialization*
+}
+
+FeatureSpecialization = {
+    Typings
+    | Subsettings
+    | References_
+    | Crosses
+    | Redefinitions
+}
+
+Typings = { TypedBy ~ ("," ~ FeatureTyping)* }
+
+TypedBy = { DefinedByToken ~ FeatureTyping }
+
+FeatureTyping = { OwnedFeatureTyping | ConjugatedPortTyping }
+
+OwnedFeatureTyping = { FeatureType }
+
+FeatureType = { QualifiedName | OwnedFeatureChain }
+
+ConjugatedPortTyping = { "~" ~ QualifiedName }
+
+Subsettings = { Subsets ~ ("," ~ OwnedSubsetting)* }
+
+Subsets = { SubsetsToken ~ OwnedSubsetting }
+
+OwnedSubsetting = { QualifiedName | OwnedFeatureChain }
+
+References_ = { ReferencesToken ~ OwnedReferenceSubsetting }
+
+OwnedReferenceSubsetting = { QualifiedName | OwnedFeatureChain }
+
+Crosses = { CrossesToken ~ OwnedCrossSubsetting }
+
+OwnedCrossSubsetting = { QualifiedName | OwnedFeatureChain }
+
+Redefinitions = { Redefines ~ ("," ~ OwnedRedefinition)* }
+
+Redefines = { RedefinesToken ~ OwnedRedefinition }
+
+OwnedRedefinition = { QualifiedName | OwnedFeatureChain }
+
+// Feature chains
+OwnedFeatureChain = { FeatureChain }
+
+FeatureChain = { OwnedFeatureChaining ~ ("." ~ OwnedFeatureChaining)+ }
+
+FeatureChainPrefix = { (OwnedFeatureChaining ~ ".")+ ~ OwnedFeatureChaining ~ "." }
+
+OwnedFeatureChaining = { QualifiedName }
+
+// Multiplicity
+MultiplicityPart = {
+    OwnedMultiplicity ~ MultiplicityProperties?
+    | MultiplicityProperties
+}
+
+OwnedMultiplicity = { MultiplicityRange }
+
+MultiplicityRange = { "[" ~ MultiplicityExpressionMember ~ "]" }
+
+MultiplicityExpressionMember = { OwnedExpression }
+
+// Value part
+ValuePart = { FeatureValue }
+
+FeatureValue = {
+    ("=" | ":=" | (KW_DEFAULT ~ ("=" | ":=")?)) ~ OwnedExpression
+}

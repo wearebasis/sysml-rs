@@ -1,0 +1,27 @@
+[package]
+name = "sysml-text-pest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native Rust parser for SysML v2 textual notation using pest"
+
+[dependencies]
+sysml-core = { workspace = true }
+sysml-text = { workspace = true }
+sysml-span = { workspace = true }
+sysml-id = { workspace = true }
+pest = "2.7"
+pest_derive = "2.7"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[build-dependencies]
+sysml-codegen = { path = "../codegen" }
+
+[features]
+default = []
+# Enable coverage tracking features for spec tests
+coverage = []

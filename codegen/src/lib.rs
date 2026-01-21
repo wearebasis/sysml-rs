@@ -46,6 +46,7 @@ pub mod enum_value_generator;
 pub mod hierarchy_generator;
 pub mod inheritance;
 pub mod json_schema_parser;
+pub mod pest_generator;
 pub mod relationship_generator;
 pub mod shapes_parser;
 pub mod spec_validation;
@@ -53,6 +54,7 @@ pub mod ttl_parser;
 pub mod validation_generator;
 pub mod xmi_class_parser;
 pub mod xmi_relationship_parser;
+pub mod xtext_parser;
 
 pub use enum_generator::generate_enum;
 pub use enum_value_generator::generate_value_enums;
@@ -78,6 +80,14 @@ pub use xmi_class_parser::{parse_all_xmi_classes, parse_xmi_classes_from_file};
 pub use xmi_relationship_parser::{
     parse_relationship_constraints, validate_relationship_coverage, CoverageReport, XmiParseError,
     XmiRelationshipConstraint,
+};
+pub use xtext_parser::{
+    extract_all_keyword_strings, parse_xtext_enums, parse_xtext_keywords, parse_xtext_operators,
+    parse_xtext_rules, KeywordInfo, OperatorInfo, XtextEnumInfo, XtextRule,
+};
+pub use pest_generator::{
+    extract_all_enums, extract_all_keywords, extract_all_operators, generate_pest_enums,
+    generate_pest_keywords, generate_pest_keywords_from_strings, generate_pest_operators,
 };
 
 #[cfg(test)]

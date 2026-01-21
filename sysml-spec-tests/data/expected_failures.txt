@@ -1,0 +1,93 @@
+# SysML v2 Parser - Expected Failures
+#
+# This file lists corpus files that are expected to fail parsing.
+# The list MUST shrink over time as parser bugs are fixed.
+#
+# Format: One file path pattern per line
+# - Use relative paths from sysmlv2-references/
+# - Use **/ prefix for "any directory" matching
+# - Lines starting with # are comments
+# - Empty lines are ignored
+
+# =============================================================================
+# Standard Library Files (all have documentation comment issues)
+# =============================================================================
+
+# All library.systems files have documentation comment precedence issues
+**/library.systems/Actions.sysml
+**/library.systems/Allocations.sysml
+**/library.systems/AnalysisCases.sysml
+**/library.systems/Attributes.sysml
+**/library.systems/Calculations.sysml
+**/library.systems/Cases.sysml
+**/library.systems/Connections.sysml
+**/library.systems/Constraints.sysml
+**/library.systems/Flows.sysml
+**/library.systems/Interfaces.sysml
+**/library.systems/Items.sysml
+**/library.systems/Metadata.sysml
+**/library.systems/Parts.sysml
+**/library.systems/Ports.sysml
+**/library.systems/Requirements.sysml
+**/library.systems/StandardViewDefinitions.sysml
+**/library.systems/States.sysml
+**/library.systems/SysML.sysml
+**/library.systems/UseCases.sysml
+**/library.systems/VerificationCases.sysml
+**/library.systems/Views.sysml
+
+# =============================================================================
+# SE_Models - Engineering Example Models
+# =============================================================================
+
+**/SE_Models/DroneModelLogical.sysml
+**/SE_Models/Drone_BaseArchitecture.sysml
+**/SE_Models/EIT_System_Use_Cases.sysml
+**/SE_Models/Fischertechnik.sysml
+**/SE_Models/ForestFireDetectionSystemModel.sysml
+**/SE_Models/ForestFireObservationDrone.sysml
+**/SE_Models/HVACSystemRequirements.sysml
+**/SE_Models/InternetModel_v1.sysml
+**/SE_Models/lawnmowerPackage.sysml
+**/SE_Models/Metamodel.sysml
+**/SE_Models/MPLEExample_DirectCleanApproach_Vehicle.sysml
+**/SE_Models/StopWatchStates.sysml
+**/SE_Models/VehicleModel.sysml
+
+# =============================================================================
+# Mining Frigate Models (complex domain models)
+# =============================================================================
+
+# Domain Model
+**/example_EveOnlineMiningFrigate/DomainModel/AnalysisProblemSpace.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/BusinessCaseOpsCon.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/cause-effect.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/Concerns.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/Domain.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningCorporationRequirementsDecl.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningCorporationRequirementsDef.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningFrigate.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningFrigateRequirements.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningFrigateRequirementsDef.sysml
+**/example_EveOnlineMiningFrigate/DomainModel/MiningFrigateVerificationCases.sysml
+
+# Logical Architecture
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/ActionsHull.sysml
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/COTS.sysml
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/MiningFrigate.sysml
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/rollupAnalysis.sysml
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/standardPortsAndInterfaces.sysml
+**/example_EveOnlineMiningFrigate/LogicalArchitecture/UseCasesHull.sysml
+
+# Use Cases
+**/example_EveOnlineMiningFrigate/UseCases/OperationalUseCaseActions.sysml
+**/example_EveOnlineMiningFrigate/UseCases/UseCasesFrigate.sysml
+
+# =============================================================================
+# Other Example Models
+# =============================================================================
+
+**/example_contribution/CalculationExample.sysml
+**/example_contribution/example_nested/Boeing.sysml
+**/example_family/family.sysml
+**/example_sos/system-of-systems.sysml

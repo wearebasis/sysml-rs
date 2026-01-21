@@ -1,0 +1,63 @@
+// =============================================================================
+// ANNOTATIONS
+// =============================================================================
+
+AnnotatingElement = {
+    Comment
+    | Documentation
+    | TextualRepresentation
+    | MetadataUsage
+}
+
+Comment = {
+    (KW_COMMENT ~ Identification? ~ (KW_ABOUT ~ Annotation ~ ("," ~ Annotation)*)?)? ~
+    (KW_LOCALE ~ STRING_VALUE)? ~
+    REGULAR_COMMENT_BODY
+}
+
+Documentation = {
+    KW_DOC ~ Identification? ~
+    (KW_LOCALE ~ STRING_VALUE)? ~
+    REGULAR_COMMENT_BODY
+}
+
+TextualRepresentation = {
+    (KW_REP ~ Identification?)? ~ KW_LANGUAGE ~ STRING_VALUE ~ REGULAR_COMMENT_BODY
+}
+
+Annotation = { QualifiedName }
+
+// Metadata
+PrefixMetadata = { PrefixMetadataMember+ }
+
+PrefixMetadataMember = { PrefixMetadataUsage }
+
+PrefixMetadataUsage = { "#" ~ MetadataTyping }
+
+MetadataTyping = { QualifiedName }
+
+MetadataUsage = {
+    PrefixMetadata? ~ (KW_METADATA | "@") ~ MetadataUsageDeclaration ~
+    (KW_ABOUT ~ Annotation ~ ("," ~ Annotation)*)? ~
+    MetadataBody
+}
+
+MetadataUsageDeclaration = { (Identification? ~ DefinedByToken)? ~ MetadataTyping }
+
+MetadataBody = { ";" | "{" ~ MetadataBodyItem* ~ "}" }
+
+MetadataBodyItem = {
+    DefinitionMember
+    | RelationshipMember
+    | AnnotatingMember
+    | MetadataBodyUsageMember
+    | AliasMember
+    | Import
+}
+
+MetadataBodyUsageMember = { MetadataBodyUsage }
+
+MetadataBodyUsage = {
+    KW_REF? ~ RedefinesToken? ~ OwnedRedefinition ~
+    FeatureSpecializationPart? ~ ValuePart? ~ MetadataBody
+}

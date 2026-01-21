@@ -1,0 +1,17 @@
+// =============================================================================
+// NAMES AND REFERENCES
+// =============================================================================
+
+Name = { ID | UNRESTRICTED_NAME }
+
+// Short name: <name>
+ShortName = { "<" ~ Name ~ ">" }
+
+// Regular name: just the name
+RegularName = { Name }
+
+// Identification: <shortName> name | name | <shortName>
+Identification = { ShortName ~ RegularName? | RegularName }
+
+// Qualified reference chain: A::B::C
+QualifiedName = { Name ~ ("::" ~ Name)* }

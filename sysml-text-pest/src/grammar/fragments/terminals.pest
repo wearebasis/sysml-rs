@@ -1,0 +1,25 @@
+// =============================================================================
+// TERMINALS
+// =============================================================================
+
+// Identifiers
+ID = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Unrestricted name: 'name with spaces'
+UNRESTRICTED_NAME = @{ "'" ~ (ESCAPE_SEQUENCE | (!("'" | "\\") ~ ANY))* ~ "'" }
+
+// String literals
+STRING_VALUE = @{ "\"" ~ (ESCAPE_SEQUENCE | (!("\"" | "\\") ~ ANY))* ~ "\"" }
+
+// Escape sequences
+ESCAPE_SEQUENCE = _{ "\\" ~ ("'" | "\"" | "b" | "f" | "t" | "n" | "r" | "\\") }
+
+// Numbers
+DECIMAL = @{ ASCII_DIGIT+ }
+FRACTION = @{ "." ~ DECIMAL }
+FLOAT = @{ DECIMAL ~ FRACTION? | FRACTION }
+EXPONENT = @{ ("e" | "E") ~ ("-" | "+")? ~ DECIMAL }
+NUMBER = @{ FLOAT ~ EXPONENT? }
+
+// Regular comment body for textual annotations
+REGULAR_COMMENT_BODY = @{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

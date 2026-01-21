@@ -1,0 +1,147 @@
+// =============================================================================
+// ACTION NODES
+// =============================================================================
+
+ActionNode = {
+    SendNode
+    | AcceptNode
+    | AssignmentNode
+    | TerminateNode
+    | IfNode
+    | WhileLoopNode
+    | ForLoopNode
+    | ControlNode
+}
+
+ActionNodePrefix = { OccurrenceUsagePrefix ~ ActionNodeUsageDeclaration? }
+
+ActionNodeUsageDeclaration = { KW_ACTION ~ UsageDeclaration? }
+
+SendNode = {
+    OccurrenceUsagePrefix ~ ActionNodeUsageDeclaration? ~
+    KW_SEND ~ NodeParameterMember ~
+    (KW_VIA ~ NodeParameterMember)? ~
+    (KW_TO ~ NodeParameterMember)? ~
+    ActionBody
+}
+
+AcceptNode = {
+    OccurrenceUsagePrefix ~ ActionNodeUsageDeclaration? ~
+    KW_ACCEPT ~ AcceptParameterPart ~ ActionBody
+}
+
+AcceptParameterPart = {
+    PayloadParameterMember ~ (KW_VIA ~ NodeParameterMember)?
+}
+
+PayloadParameterMember = { PayloadParameter }
+
+PayloadParameter = {
+    Identification? ~ TriggerValuePart
+    | Identification? ~ PayloadFeatureSpecializationPart ~ ValuePart?
+    | Identification ~ ValuePart?
+}
+
+TriggerValuePart = { TriggerFeatureValue }
+
+TriggerFeatureValue = { TriggerExpression }
+
+TriggerExpression = {
+    TriggerKind ~ ArgumentMember
+}
+
+TriggerKind = { KW_AT | KW_AFTER | KW_WHEN }
+
+NodeParameterMember = { NodeParameter }
+
+NodeParameter = { FeatureBinding }
+
+FeatureBinding = { OwnedExpression }
+
+AssignmentNode = {
+    OccurrenceUsagePrefix ~ ActionNodeUsageDeclaration? ~
+    KW_ASSIGN ~ FeatureChainMember ~ ":=" ~ NodeParameterMember ~ ActionBody
+}
+
+FeatureChainMember = { QualifiedName | OwnedFeatureChain }
+
+TerminateNode = {
+    ActionNodePrefix ~ KW_TERMINATE ~ NodeParameterMember? ~ ActionBody
+}
+
+IfNode = {
+    ActionNodePrefix ~ KW_IF ~ ExpressionParameterMember ~
+    ActionBodyParameterMember ~
+    (KW_ELSE ~ (ActionBodyParameterMember | IfNodeParameterMember))?
+}
+
+ExpressionParameterMember = { OwnedExpression }
+
+ActionBodyParameterMember = { ActionBodyParameter }
+
+ActionBodyParameter = { (KW_ACTION ~ UsageDeclaration?)? ~ "{" ~ ActionBodyItem* ~ "}" }
+
+IfNodeParameterMember = { IfNode }
+
+WhileLoopNode = {
+    ActionNodePrefix ~ (
+        KW_WHILE ~ ExpressionParameterMember
+        | KW_LOOP
+    ) ~ ActionBodyParameterMember ~
+    (KW_UNTIL ~ ExpressionParameterMember ~ ";")?
+}
+
+ForLoopNode = {
+    ActionNodePrefix ~ KW_FOR ~ ForVariableDeclarationMember ~
+    KW_IN ~ NodeParameterMember ~ ActionBodyParameterMember
+}
+
+ForVariableDeclarationMember = { ForVariableDeclaration }
+
+ForVariableDeclaration = { UsageDeclaration }
+
+ControlNode = { MergeNode | DecisionNode | JoinNode | ForkNode }
+
+ControlNodePrefix = { RefPrefix ~ Individual? ~ Portion? ~ PrefixMetadata? }
+
+MergeNode = { ControlNodePrefix ~ KW_MERGE ~ UsageDeclaration? ~ ActionNodeBody }
+
+DecisionNode = { ControlNodePrefix ~ KW_DECIDE ~ UsageDeclaration? ~ ActionNodeBody }
+
+JoinNode = { ControlNodePrefix ~ KW_JOIN ~ UsageDeclaration? ~ ActionNodeBody }
+
+ForkNode = { ControlNodePrefix ~ KW_FORK ~ UsageDeclaration? ~ ActionNodeBody }
+
+ActionNodeBody = { ";" | "{" ~ AnnotatingMember* ~ "}" }
+
+// =============================================================================
+// TRANSITIONS
+// =============================================================================
+
+TransitionUsage = {
+    KW_TRANSITION ~ (UsageDeclaration? ~ KW_FIRST)? ~
+    TransitionSourceMember ~
+    TriggerActionMember? ~
+    GuardExpressionMember? ~
+    EffectBehaviorMember? ~
+    KW_THEN ~ TransitionSuccessionMember ~
+    ActionBody
+}
+
+TransitionSourceMember = { QualifiedName | OwnedFeatureChain }
+
+TriggerActionMember = { KW_ACCEPT ~ TriggerAction }
+
+TriggerAction = { AcceptParameterPart }
+
+GuardExpressionMember = { KW_IF ~ OwnedExpression }
+
+EffectBehaviorMember = { KW_DO ~ EffectBehaviorUsage }
+
+EffectBehaviorUsage = {
+    UsageDeclaration? ~ ("{" ~ ActionBodyItem* ~ "}")?
+}
+
+TransitionSuccessionMember = { TransitionSuccession }
+
+TransitionSuccession = { ConnectorEndMember }

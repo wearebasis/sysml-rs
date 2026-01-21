@@ -1,0 +1,209 @@
+// =============================================================================
+// EXPRESSIONS
+// =============================================================================
+
+OwnedExpression = { ConditionalExpression }
+
+OwnedExpressionMember = { OwnedExpression }
+
+OwnedExpressionReference = { OwnedExpressionMember }
+
+// Conditional Expressions
+ConditionalExpression = {
+    NullCoalescingExpression
+    | ConcreteConditionalExpression
+}
+
+ConcreteConditionalExpression = {
+    KW_IF ~ NullCoalescingExpression ~ "?" ~ OwnedExpressionReference ~
+    KW_ELSE ~ OwnedExpressionReference
+}
+
+NullCoalescingExpression = {
+    ImpliesExpression ~ ("??" ~ ImpliesExpressionReference)*
+}
+
+ImpliesExpressionReference = { ImpliesExpressionMember }
+
+ImpliesExpressionMember = { ImpliesExpression }
+
+// Logical Expressions
+ImpliesExpression = {
+    OrExpression ~ (KW_IMPLIES ~ OrExpressionReference)*
+}
+
+OrExpressionReference = { OrExpressionMember }
+
+OrExpressionMember = { OrExpression }
+
+OrExpression = {
+    XorExpression ~ (("|" ~ XorExpression) | (KW_OR ~ XorExpressionReference))*
+}
+
+XorExpressionReference = { XorExpressionMember }
+
+XorExpressionMember = { XorExpression }
+
+XorExpression = {
+    AndExpression ~ (KW_XOR ~ AndExpression)*
+}
+
+AndExpression = {
+    EqualityExpression ~ (("&" ~ EqualityExpression) | (KW_AND ~ EqualityExpressionReference))*
+}
+
+EqualityExpressionReference = { EqualityExpressionMember }
+
+EqualityExpressionMember = { EqualityExpression }
+
+// Equality Expressions
+EqualityExpression = {
+    ClassificationExpression ~ (EqualityOperator ~ ClassificationExpression)*
+}
+
+// Classification Expressions
+ClassificationExpression = {
+    RelationalExpression ~ (
+        (ClassificationTestOperator ~ TypeReferenceMember)
+        | (KW_AS ~ TypeResultMember)
+    )?
+    | ClassificationTestOperator ~ TypeReferenceMember
+    | MetadataReference ~ "@@" ~ TypeReferenceMember
+    | KW_AS ~ TypeResultMember
+    | MetadataReference ~ KW_META ~ TypeResultMember
+}
+
+TypeReferenceMember = { TypeReferenceFeature }
+
+TypeResultMember = { TypeReferenceFeature }
+
+TypeReferenceFeature = { ReferenceTyping }
+
+ReferenceTyping = { QualifiedName }
+
+MetadataReference = { QualifiedName }
+
+// Relational Expressions
+RelationalExpression = {
+    RangeExpression ~ (RelationalOperator ~ RangeExpression)*
+}
+
+// Range Expressions
+RangeExpression = {
+    AdditiveExpression ~ (".." ~ AdditiveExpression)?
+}
+
+// Arithmetic Expressions
+AdditiveExpression = {
+    MultiplicativeExpression ~ (("+" | "-") ~ MultiplicativeExpression)*
+}
+
+MultiplicativeExpression = {
+    ExponentiationExpression ~ (("*" | "/" | "%") ~ ExponentiationExpression)*
+}
+
+ExponentiationExpression = {
+    UnaryExpression ~ (("**" | "^") ~ ExponentiationExpression)?
+}
+
+// Unary Expressions
+UnaryExpression = {
+    UnaryOperator ~ ExtentExpression
+    | ExtentExpression
+}
+
+// Extent Expressions
+ExtentExpression = {
+    KW_ALL ~ TypeResultMember
+    | PrimaryExpression
+}
+
+// Primary Expressions
+PrimaryExpression = {
+    BaseExpression ~
+    ("." ~ FeatureChainMember)? ~
+    (
+        ("#" ~ "(" ~ SequenceExpression ~ ")")
+        | ("[" ~ SequenceExpression ~ "]")
+        | ("->" ~ ReferenceTyping ~ (ExpressionBodyMember | FunctionReferenceMember | ArgumentList))
+        | ("." ~ ExpressionBodyMember)
+        | (".?" ~ ExpressionBodyMember)
+    )* ~
+    ("." ~ FeatureChainMember)?
+}
+
+// Base Expressions
+BaseExpression = {
+    NullExpression
+    | LiteralExpression
+    | FeatureReferenceExpression
+    | MetadataAccessExpression
+    | InvocationExpression
+    | BodyExpression
+    | "(" ~ SequenceExpression ~ ")"
+}
+
+// Null Expressions
+NullExpression = { KW_NULL | "(" ~ ")" }
+
+// Literal Expressions
+LiteralExpression = {
+    LiteralBoolean
+    | LiteralString
+    | LiteralNumber
+    | LiteralInfinity
+}
+
+LiteralBoolean = { KW_TRUE | KW_FALSE }
+
+LiteralString = { STRING_VALUE }
+
+LiteralNumber = { NUMBER }
+
+LiteralInfinity = { "*" }
+
+// Feature Reference Expressions
+FeatureReferenceExpression = { FeatureReferenceMember }
+
+FeatureReferenceMember = { QualifiedName }
+
+// Metadata Access Expressions
+MetadataAccessExpression = { QualifiedName ~ "." ~ KW_METADATA }
+
+// Invocation Expressions
+InvocationExpression = { OwnedFeatureTyping ~ ArgumentList }
+
+ArgumentList = { "(" ~ (PositionalArgumentList | NamedArgumentList)? ~ ")" }
+
+PositionalArgumentList = { ArgumentMember ~ ("," ~ ArgumentMember)* }
+
+ArgumentMember = { Argument }
+
+Argument = { ArgumentValue }
+
+ArgumentValue = { OwnedExpression }
+
+NamedArgumentList = { NamedArgumentMember ~ ("," ~ NamedArgumentMember)* }
+
+NamedArgumentMember = { NamedArgument }
+
+NamedArgument = { ParameterRedefinition ~ "=" ~ ArgumentValue }
+
+ParameterRedefinition = { QualifiedName }
+
+// Body Expressions
+BodyExpression = { ExpressionBodyMember }
+
+ExpressionBodyMember = { ExpressionBody }
+
+ExpressionBody = { "{" ~ CalculationBodyItem* ~ ResultExpressionMember? ~ "}" }
+
+// Function Reference
+FunctionReferenceMember = { FunctionReference }
+
+FunctionReference = { ReferenceTyping }
+
+// Sequence Expressions
+SequenceExpression = {
+    OwnedExpression ~ (("," ~ SequenceExpression) | ",")?
+}

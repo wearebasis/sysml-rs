@@ -1,0 +1,327 @@
+// =============================================================================
+// USAGES
+// =============================================================================
+
+UsageElement = {
+    NonOccurrenceUsageElement
+    | OccurrenceUsageElement
+}
+
+NonOccurrenceUsageElement = {
+    ReferenceUsage
+    | AttributeUsage
+    | EnumerationUsage
+    | BindingConnectorAsUsage
+    | SuccessionAsUsage
+    | ExtendedUsage
+}
+
+OccurrenceUsageElement = {
+    StructureUsageElement
+    | BehaviorUsageElement
+}
+
+StructureUsageElement = {
+    OccurrenceUsage
+    | IndividualUsage
+    | PortionUsage
+    | EventOccurrenceUsage
+    | ItemUsage
+    | PartUsage
+    | PortUsage
+    | ConnectionUsage
+    | InterfaceUsage
+    | AllocationUsage
+    | FlowConnectionUsage
+    | ViewUsage
+    | RenderingUsage
+}
+
+BehaviorUsageElement = {
+    ActionUsage
+    | CalculationUsage
+    | StateUsage
+    | ConstraintUsage
+    | RequirementUsage
+    | ConcernUsage
+    | CaseUsage
+    | AnalysisCaseUsage
+    | VerificationCaseUsage
+    | UseCaseUsage
+    | ViewpointUsage
+    | PerformActionUsage
+    | ExhibitStateUsage
+    | IncludeUseCaseUsage
+    | AssertConstraintUsage
+    | SatisfyRequirementUsage
+}
+
+VariantUsageElement = {
+    VariantReference
+    | NonOccurrenceUsageElement
+    | OccurrenceUsageElement
+}
+
+VariantReference = { OwnedReferenceSubsetting ~ FeatureSpecialization* ~ UsageBody }
+
+// Usage prefixes
+UsagePrefix = { UnextendedUsagePrefix ~ UsageExtensionKeyword* }
+UnextendedUsagePrefix = { EndUsagePrefix | BasicUsagePrefix }
+BasicUsagePrefix = { RefPrefix ~ Reference? }
+RefPrefix = { FeatureDirectionKind? ~ BasicDefinitionPrefix? ~ Readonly? ~ Derived? }
+Reference = { KW_REF }
+EndUsagePrefix = { End ~ OwnedCrossingFeatureMember? }
+UsageExtensionKeyword = { PrefixMetadataMember }
+OwnedCrossingFeatureMember = { OwnedCrossingFeature }
+OwnedCrossingFeature = { BasicUsagePrefix? ~ UsageDeclaration }
+
+UsageDeclaration = { FeatureDeclaration }
+
+UsageCompletion = { ValuePart? ~ UsageBody }
+
+UsageBody = { DefinitionBody }
+
+// Specific usages
+ReferenceUsage = {
+    (EndUsagePrefix | RefPrefix) ~ KW_REF ~ UsageDeclaration? ~ UsageCompletion
+}
+
+DefaultReferenceUsage = {
+    End? ~ RefPrefix ~ UsageDeclaration? ~ UsageCompletion
+}
+
+AttributeUsage = {
+    UsagePrefix ~ KW_ATTRIBUTE ~ UsageDeclaration? ~ UsageCompletion
+}
+
+EnumerationUsage = {
+    UsagePrefix ~ KW_ENUM ~ UsageDeclaration? ~ UsageCompletion
+}
+
+OccurrenceUsage = {
+    OccurrenceUsagePrefix ~ KW_OCCURRENCE ~ UsageDeclaration? ~ UsageCompletion
+}
+
+OccurrenceUsagePrefix = {
+    (EndUsagePrefix | BasicOccurrenceUsagePrefix) ~ UsageExtensionKeyword*
+}
+
+BasicOccurrenceUsagePrefix = { BasicUsagePrefix ~ Individual? ~ Portion? }
+
+Portion = { PortionKind }
+
+IndividualUsage = {
+    BasicUsagePrefix ~ Individual ~ UsageExtensionKeyword* ~ UsageDeclaration? ~ UsageCompletion
+}
+
+PortionUsage = {
+    BasicUsagePrefix ~ Individual? ~ Portion ~ UsageExtensionKeyword* ~ UsageDeclaration? ~ UsageCompletion
+}
+
+EventOccurrenceUsage = {
+    OccurrenceUsagePrefix ~ KW_EVENT ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_OCCURRENCE ~ UsageDeclaration?
+    ) ~ UsageCompletion
+}
+
+ItemUsage = {
+    OccurrenceUsagePrefix ~ KW_ITEM ~ UsageDeclaration? ~ UsageCompletion
+}
+
+PartUsage = {
+    OccurrenceUsagePrefix ~ KW_PART ~ UsageDeclaration? ~ UsageCompletion
+}
+
+PortUsage = {
+    OccurrenceUsagePrefix ~ KW_PORT ~ UsageDeclaration? ~ UsageCompletion
+}
+
+ConnectionUsage = {
+    OccurrenceUsagePrefix ~ (
+        KW_CONNECTION ~ UsageDeclaration? ~ ValuePart? ~ (KW_CONNECT ~ ConnectorPart)?
+        | KW_CONNECT ~ ConnectorPart
+    ) ~ UsageBody
+}
+
+ConnectorPart = { BinaryConnectorPart | NaryConnectorPart }
+
+BinaryConnectorPart = { ConnectorEndMember ~ KW_TO ~ ConnectorEndMember }
+
+NaryConnectorPart = { "(" ~ ConnectorEndMember ~ ("," ~ ConnectorEndMember)+ ~ ")" }
+
+ConnectorEndMember = { ConnectorEnd }
+
+ConnectorEnd = {
+    OwnedCrossMultiplicityMember? ~ (RegularName ~ ReferencesToken)? ~ OwnedReferenceSubsetting
+}
+
+OwnedCrossMultiplicityMember = { OwnedCrossMultiplicity }
+
+OwnedCrossMultiplicity = { OwnedMultiplicity }
+
+InterfaceUsage = {
+    OccurrenceUsagePrefix ~ KW_INTERFACE ~ UsageDeclaration? ~ (KW_CONNECT ~ InterfacePart)? ~ InterfaceBody
+}
+
+InterfacePart = { BinaryInterfacePart | NaryInterfacePart }
+
+BinaryInterfacePart = { InterfaceEndMember ~ KW_TO ~ InterfaceEndMember }
+
+NaryInterfacePart = { "(" ~ InterfaceEndMember ~ ("," ~ InterfaceEndMember)+ ~ ")" }
+
+InterfaceEndMember = { InterfaceEnd }
+
+InterfaceEnd = {
+    OwnedCrossMultiplicityMember? ~ (RegularName ~ ReferencesToken)? ~ OwnedReferenceSubsetting
+}
+
+AllocationUsage = {
+    OccurrenceUsagePrefix ~ (
+        KW_ALLOCATION ~ UsageDeclaration? ~ (KW_ALLOCATE ~ ConnectorPart)?
+        | KW_ALLOCATE ~ ConnectorPart
+    ) ~ UsageBody
+}
+
+FlowConnectionUsage = {
+    OccurrenceUsagePrefix ~ KW_FLOW ~ FlowConnectionDeclaration ~ DefinitionBody
+}
+
+FlowConnectionDeclaration = {
+    FlowEndMember ~ KW_TO ~ FlowEndMember
+    | UsageDeclaration? ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)? ~
+        (KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember)?
+}
+
+ItemFeatureMember = { ItemFeature }
+
+ItemFeature = {
+    Identification? ~ PayloadFeatureSpecializationPart ~ ValuePart?
+    | Identification? ~ ValuePart
+    | OwnedFeatureTyping ~ OwnedMultiplicity?
+    | OwnedMultiplicity ~ OwnedFeatureTyping
+}
+
+PayloadFeatureSpecializationPart = {
+    FeatureSpecialization+ ~ (MultiplicityPart ~ FeatureSpecialization*)?
+    | MultiplicityPart ~ FeatureSpecialization+
+}
+
+FlowEndMember = { FlowEnd }
+
+FlowEnd = { FlowEndSubsetting? ~ FlowFeatureMember }
+
+FlowEndSubsetting = { QualifiedName ~ "." | FeatureChainPrefix }
+
+FlowFeatureMember = { FlowFeature }
+
+FlowFeature = { FlowRedefinition }
+
+FlowRedefinition = { QualifiedName }
+
+ViewUsage = {
+    OccurrenceUsagePrefix ~ KW_VIEW ~ UsageDeclaration? ~ ValuePart? ~ ViewBody
+}
+
+RenderingUsage = {
+    OccurrenceUsagePrefix ~ KW_RENDERING ~ UsageDeclaration? ~ UsageCompletion
+}
+
+ActionUsage = {
+    OccurrenceUsagePrefix ~ KW_ACTION ~ UsageDeclaration? ~ ValuePart? ~ ActionBody
+}
+
+PerformActionUsage = {
+    OccurrenceUsagePrefix ~ KW_PERFORM ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_ACTION ~ UsageDeclaration?
+    ) ~ ValuePart? ~ ActionBody
+}
+
+CalculationUsage = {
+    OccurrenceUsagePrefix ~ KW_CALC ~ UsageDeclaration? ~ ValuePart? ~ CalculationBody
+}
+
+StateUsage = {
+    OccurrenceUsagePrefix ~ KW_STATE ~ UsageDeclaration? ~ ValuePart? ~ StateBody
+}
+
+ExhibitStateUsage = {
+    OccurrenceUsagePrefix ~ KW_EXHIBIT ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_STATE ~ UsageDeclaration?
+    ) ~ ValuePart? ~ StateBody
+}
+
+ConstraintUsage = {
+    OccurrenceUsagePrefix ~ KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart? ~ CalculationBody
+}
+
+AssertConstraintUsage = {
+    OccurrenceUsagePrefix ~ KW_ASSERT ~ KW_NOT? ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart?
+    ) ~ CalculationBody
+}
+
+RequirementUsage = {
+    OccurrenceUsagePrefix ~ KW_REQUIREMENT ~ UsageDeclaration? ~ ValuePart? ~ RequirementBody
+}
+
+SatisfyRequirementUsage = {
+    OccurrenceUsagePrefix ~ KW_ASSERT? ~ KW_NOT? ~ KW_SATISFY ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_REQUIREMENT ~ UsageDeclaration?
+    ) ~ ValuePart? ~ (KW_BY ~ SatisfactionSubjectMember)? ~ RequirementBody
+}
+
+SatisfactionSubjectMember = { SatisfactionParameter }
+
+SatisfactionParameter = { SatisfactionFeatureValue }
+
+SatisfactionFeatureValue = { OwnedExpression }
+
+ConcernUsage = {
+    OccurrenceUsagePrefix ~ KW_CONCERN ~ UsageDeclaration? ~ ValuePart? ~ RequirementBody
+}
+
+CaseUsage = {
+    OccurrenceUsagePrefix ~ KW_CASE ~ UsageDeclaration? ~ ValuePart? ~ CaseBody
+}
+
+AnalysisCaseUsage = {
+    OccurrenceUsagePrefix ~ KW_ANALYSIS ~ UsageDeclaration? ~ ValuePart? ~ CaseBody
+}
+
+VerificationCaseUsage = {
+    OccurrenceUsagePrefix ~ KW_VERIFICATION ~ UsageDeclaration? ~ ValuePart? ~ CaseBody
+}
+
+UseCaseUsage = {
+    OccurrenceUsagePrefix ~ KW_USE ~ KW_CASE ~ UsageDeclaration? ~ ValuePart? ~ CaseBody
+}
+
+IncludeUseCaseUsage = {
+    OccurrenceUsagePrefix ~ KW_INCLUDE ~ (
+        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+        | KW_USE ~ KW_CASE ~ UsageDeclaration?
+    ) ~ ValuePart? ~ CaseBody
+}
+
+ViewpointUsage = {
+    OccurrenceUsagePrefix ~ KW_VIEWPOINT ~ UsageDeclaration? ~ ValuePart? ~ RequirementBody
+}
+
+BindingConnectorAsUsage = {
+    UsagePrefix ~ (KW_BINDING ~ UsageDeclaration?)? ~
+    KW_BIND ~ ConnectorEndMember ~ "=" ~ ConnectorEndMember ~ DefinitionBody
+}
+
+SuccessionAsUsage = {
+    UsagePrefix ~ (KW_SUCCESSION ~ UsageDeclaration?)? ~
+    KW_FIRST ~ ConnectorEndMember ~ KW_THEN ~ ConnectorEndMember ~ DefinitionBody
+}
+
+ExtendedUsage = {
+    UnextendedUsagePrefix ~ UsageExtensionKeyword+ ~ UsageDeclaration? ~ UsageCompletion
+}

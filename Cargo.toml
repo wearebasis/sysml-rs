@@ -16,6 +16,7 @@ members = [
     "sysml-text-pilot-sidecar",
     "sysml-text-monticore-sidecar",
     "sysml-text-syside-sidecar",
+    "sysml-text-pest",
     # IDE
     "sysml-ts",
     "sysml-lsp",
@@ -30,6 +31,8 @@ members = [
     "sysml-store",
     "sysml-store-postgres",
     "sysml-api",
+    # Testing
+    "sysml-spec-tests",
 ]
 
 [workspace.package]
@@ -48,6 +51,7 @@ sysml-core = { path = "sysml-core" }
 sysml-query = { path = "sysml-query" }
 sysml-canon = { path = "sysml-canon" }
 sysml-text = { path = "sysml-text" }
+sysml-text-pest = { path = "sysml-text-pest", default-features = false }
 sysml-ts = { path = "sysml-ts" }
 sysml-lsp = { path = "sysml-lsp" }
 sysml-run = { path = "sysml-run" }
@@ -63,6 +67,7 @@ axum = "0.7"
 tokio = { version = "1.35", features = ["full"] }
 sqlx = { version = "0.7", features = ["runtime-tokio", "postgres"] }
 criterion = { version = "0.5", features = ["html_reports"] }
+walkdir = "2.4"
 
 # For running examples at the workspace level
 [package]
