@@ -11,7 +11,10 @@ This crate defines the interface for parsing SysML v2 textual notation:
 - **Parser**: Trait for parser implementations
 - **Formatter**: Trait for formatter implementations
 
-Actual parsing is implemented by sidecar crates that wrap external parsers.
+Parsing implementations live in separate crates:
+
+- `sysml-text-pest`: native Rust parser using pest
+- `sysml-text-*-sidecar`: adapters for external parsers (Pilot, MontiCore, SySide)
 
 ## Public API
 

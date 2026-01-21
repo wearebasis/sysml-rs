@@ -36,9 +36,9 @@ This workspace follows a layered architecture with clean crate boundaries and mi
 ┌───────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
 │  FOUNDATIONS  │   │   TEXT FRONTEND     │   │        IDE          │
 │  sysml-id     │   │   sysml-text        │   │     sysml-ts        │
-│  sysml-span   │   │ + sidecar adapters  │   │     sysml-lsp       │
-│  sysml-meta   │   └─────────────────────┘   │  sysml-lsp-server   │
-└───────────────┘                             └─────────────────────┘
+│  sysml-span   │   │ sysml-text-pest     │   │     sysml-lsp       │
+│  sysml-meta   │   │ + sidecar adapters  │   │  sysml-lsp-server   │
+└───────────────┘   └─────────────────────┘   └─────────────────────┘
 ```
 
 ## Crate Map
@@ -61,6 +61,7 @@ This workspace follows a layered architecture with clean crate boundaries and mi
 | Crate | Purpose |
 |-------|---------|
 | `sysml-text` | Parser trait and result types |
+| `sysml-text-pest` | Native Rust parser (pest, spec-derived grammar) |
 | `sysml-text-pilot-sidecar` | Adapter for Pilot parser (JVM/HTTP) |
 | `sysml-text-monticore-sidecar` | Adapter for MontiCore parser (JVM/HTTP) |
 | `sysml-text-syside-sidecar` | Adapter for SySide parser (Node.js) |
@@ -89,7 +90,13 @@ This workspace follows a layered architecture with clean crate boundaries and mi
 |-------|---------|
 | `sysml-store` | Storage trait for model snapshots |
 | `sysml-store-postgres` | PostgreSQL implementation |
-| `sysml-api` | REST/GraphQL API server |
+| `sysml-api` | REST API server |
+
+### Build & Testing
+| Crate | Purpose |
+|-------|---------|
+| `codegen` | Build-time code generation from spec files |
+| `sysml-spec-tests` | Parser coverage and corpus validation |
 
 ## Getting Started
 

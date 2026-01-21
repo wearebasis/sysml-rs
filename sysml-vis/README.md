@@ -10,6 +10,49 @@ This crate provides exporters for various visualization formats:
 - **PlantUML**: For diagrams rendered with PlantUML
 - **Cytoscape JSON**: For interactive web-based visualization
 
+## Planned Views (Spec-Based)
+
+The SysML v2 standard library defines view types in:
+- `sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/StandardViewDefinitions.sysml`
+- `sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Views.sysml`
+
+These are the views we plan to support from the ModelGraph:
+
+- **GeneralView**: Generic graph view of elements and relationships
+- **BrowserView**: Tree view of membership/ownership
+- **GridView**: Tabular/relationship matrix views
+- **InterconnectionView**: Structure and connectivity (parts/ports/connectors)
+- **ActionFlowView**: Action flow/activity views
+- **StateTransitionView**: State machine views
+- **SequenceView**: Lifelines and message sequencing
+- **GeometryView**: Spatial/geometry rendering (deferred)
+
+## Implementation Order
+
+1) **BrowserView (Tree)**: purely membership-based, minimal prerequisites
+2) **GeneralView (Graph)**: generic nodes/edges (builds on relationships)
+3) **GridView (Tables)**: lists and matrices (good for requirements/trace)
+4) **InterconnectionView**: parts/ports/connectors/flows
+5) **ActionFlowView**: actions, parameters, control nodes, flows
+6) **StateTransitionView**: states, transitions, guards, triggers
+7) **SequenceView**: lifelines, event occurrences, messages
+8) **GeometryView**: spatial rendering (needs geometry model support)
+
+## Textual SysML v2 to View Mapping
+
+This maps common textual constructs to the standard views they appear in:
+
+| View | Typical textual constructs | Notes |
+|------|----------------------------|-------|
+| **GeneralView** | `package`, `part def`, `part`, `requirement`, `relationship` | Default graph of any elements/relationships |
+| **BrowserView** | `package`, owned members, `import` | Hierarchical ownership tree |
+| **GridView** | `satisfy`, `verify`, `allocate`, `dependency` | Tables and matrices (requirements/traceability) |
+| **InterconnectionView** | `part def`, `part`, `port def`, `port`, `connection`, `flow` | Structure + connectivity diagrams |
+| **ActionFlowView** | `action def`, `action`, `first/then`, `fork/join/decision/merge` | Activity/action flow diagrams |
+| **StateTransitionView** | `state def`, `state`, `transition` | State machine diagrams |
+| **SequenceView** | `event`, `send`, `accept`, `succession` | Lifelines and message ordering |
+| **GeometryView** | spatial items, shapes, coordinate frames | 2D/3D spatial renderings (deferred) |
+
 ## Public API
 
 ### DOT (Graphviz)
@@ -19,8 +62,8 @@ use sysml_vis::to_dot;
 
 let dot = to_dot(&graph);
 // digraph sysml {
-//   "id1" [label="{Package | MyPackage}"];
-//   "id2" [label="{Part | Engine}"];
+//   "id1" [label="{Package | VehicleModel}"];
+//   "id2" [label="{PartDefinition | Engine}"];
 //   "id2" -> "id3" [label="Satisfy"];
 // }
 ```
@@ -32,7 +75,7 @@ use sysml_vis::to_plantuml;
 
 let puml = to_plantuml(&graph);
 // @startuml
-// package "MyPackage" {
+// package "VehicleModel" {
 //   class "Engine" as id2
 // }
 // id2 ..> id3 : Satisfy
@@ -60,12 +103,11 @@ let json = to_cytoscape_json(&graph);
 | Element Kind | Shape |
 |--------------|-------|
 | Package | folder |
-| Part | record |
-| Requirement | note |
-| VerificationCase | diamond |
-| StateMachine | ellipse |
-| State | ellipse |
-| Action | box |
+| PartDefinition / PartUsage | record |
+| RequirementDefinition / RequirementUsage | note |
+| VerificationCaseDefinition / VerificationCaseUsage | diamond |
+| StateDefinition / StateUsage | ellipse |
+| ActionDefinition / ActionUsage | box |
 
 ### Relationship Styles (DOT)
 
@@ -87,18 +129,24 @@ let json = to_cytoscape_json(&graph);
 ## Example
 
 ```rust
-use sysml_core::{ModelGraph, Element, ElementKind, Relationship, RelationshipKind};
+use sysml_core::{Element, ElementKind, ModelGraph, Relationship, RelationshipKind, VisibilityKind};
 use sysml_vis::{to_dot, to_plantuml, to_cytoscape_json};
 
 // Create a model
 let mut graph = ModelGraph::new();
-let pkg = Element::new_with_kind(ElementKind::Package).with_name("Vehicle");
+let pkg = Element::new_with_kind(ElementKind::Package).with_name("VehicleModel");
 let pkg_id = graph.add_element(pkg);
 
-let engine = Element::new_with_kind(ElementKind::Part)
-    .with_name("Engine")
-    .with_owner(pkg_id);
-graph.add_element(engine);
+let engine = Element::new_with_kind(ElementKind::PartDefinition)
+    .with_name("Engine");
+let engine_id = graph.add_owned_element(engine, pkg_id.clone(), VisibilityKind::Public);
+
+let req = Element::new_with_kind(ElementKind::RequirementUsage)
+    .with_name("SafetyRequirement");
+let req_id = graph.add_owned_element(req, pkg_id.clone(), VisibilityKind::Public);
+
+let satisfy = Relationship::new(RelationshipKind::Satisfy, engine_id, req_id);
+graph.add_relationship(satisfy);
 
 // Export to different formats
 let dot = to_dot(&graph);
@@ -109,7 +157,4 @@ let json = to_cytoscape_json(&graph);
 std::fs::write("model.dot", &dot).unwrap();
 std::fs::write("model.puml", &plantuml).unwrap();
 std::fs::write("model.json", &json).unwrap();
-
-// Render with Graphviz
-// dot -Tpng model.dot -o model.png
 ```

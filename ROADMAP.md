@@ -10,7 +10,10 @@ This document outlines the phased development plan for completing the sysml-rs e
 | 0b | Shapes Codegen (Typed Properties) | ✅ Complete | 1-2 weeks |
 | 0c | Type Hierarchy & Enumerations Codegen | ✅ Complete | 2-3 days |
 | 1 | Core Model Integration | ✅ Complete | 1 week |
-| 2 | Text Parsing (SySide Integration) | 🟡 Next | 2-3 weeks |
+| **2** | **Text Parsing (Pest Parser)** | **🟡 In Progress** | **3-4 weeks** |
+| 2a | ↳ Grammar & Syntax | ✅ Complete | 1 week |
+| 2b | ↳ Semantic Model Construction | 🔴 Not Started | 1-2 weeks |
+| 2c | ↳ Coverage & Validation | 🔴 Not Started | 1 week |
 | 3 | Query & Analysis | 🔴 Not Started | 1-2 weeks |
 | 4 | Visualization | 🔴 Not Started | 1 week |
 | 5 | State Machine Execution | 🔴 Not Started | 2 weeks |
@@ -747,18 +750,202 @@ cargo build -p sysml-core  # Will FAIL if coverage checks don't pass
 
 ---
 
-## Phase 2: Text Parsing (SySide Integration)
+## Phase 2: Text Parsing (Pest Parser) 🟡 IN PROGRESS
 
-**Goal**: Parse real SysML v2 text files into ModelGraph using the SySide parser, verified by grammar coverage tests.
+**Goal**: Parse real SysML v2 text files into ModelGraph using the pest parser, verified by grammar coverage tests.
 
-### Success Criteria
+### Current Status (January 2026)
 
-- [ ] Can parse valid SysML v2 files
-- [ ] Syntax errors produce helpful diagnostics with line/column
-- [ ] Spans link parsed elements back to source
-- [ ] Performance: Parse 10K lines in < 1 second
-- [ ] Support for standard library imports
-- [ ] **Coverage**: Parser handles ALL `.sysml` files from the Pilot test suite
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Pest Grammar** | ✅ Complete | 569 rules, 174 auto-generated keywords |
+| **Grammar Codegen** | ✅ Complete | build.rs extracts keywords/operators/enums from xtext |
+| **Basic Parsing** | ✅ Working | All unit/integration tests pass (12/12) |
+| **AST Converter** | ❌ Incomplete | Only extracts names/flags, no relationships or typed data |
+| **Semantic Model** | ❌ Missing | No Relationships, no OwningMembership, no typed refs |
+| **Corpus Tests** | 🟡 Partial | 36 files discovered, all on allow-list |
+| **Doc Comments** | ❌ Broken | Precedence issue blocks standard library parsing |
+
+**Key Accomplishment**: Auto-generation of 174 keywords, 18 operators, and 7 enums from xtext spec files at build time.
+
+**Critical Gap**: The parser can parse syntax but does NOT construct a semantically valid SysML v2 model. The ModelGraph it produces lacks relationships, proper ownership, and typed property data.
+
+---
+
+### Phase 2a: Grammar & Syntax ✅ COMPLETE
+
+**Goal**: Parse SysML v2 textual notation into a parse tree with correct syntax validation.
+
+#### What's Generated
+| Component | Source | Output |
+|-----------|--------|--------|
+| 174 keyword rules (`KW_*`) | xtext files | `sysml.pest` |
+| 18 operator rules | KerMLExpressions.xtext | `sysml.pest` |
+| 7 enum rules | SysML.xtext | `sysml.pest` |
+
+#### What's Hand-Written
+| Component | Reason |
+|-----------|--------|
+| Grammar fragments (12 files) | Complex PEG semantics differ from xtext CFG |
+| AST converter skeleton | Maps pest rules to ElementKind |
+
+#### Verification ✅
+```bash
+cargo test -p sysml-text-pest        # 12/12 pass
+cargo test -p sysml-codegen          # 75/75 pass
+```
+
+#### Known Issues (to fix in 2b)
+- Documentation comment precedence (1 ignored test)
+- 77 xtext rules not yet in pest grammar
+
+---
+
+### Phase 2b: Semantic Model Construction 🔴 NOT STARTED
+
+**Goal**: Convert parse tree into semantically valid SysML v2 ModelGraph with proper relationships, ownership, and typed data.
+
+#### Sub-stages
+
+**2b.1: Canonical Ownership**
+- Replace `graph.add_element()` with `graph.add_owned_element()`
+- Create `OwningMembership` for all owned elements
+- Enable `visible_members`, `resolve_qname`, namespace semantics
+
+**2b.2: Relationship Construction**
+- Create `Specialization` from `: SuperType` syntax
+- Create `FeatureTyping` from `: Type` syntax
+- Create `Subsetting` from `:> subset` syntax
+- Create `Redefinition` from `:>> redefines` syntax
+- Create `Dependency` with proper source/target
+
+**2b.3: Property Extraction**
+- Extract multiplicities (`[n]`, `[n..m]`, `[*]`)
+- Extract values (`= expr`, `:= expr`)
+- Extract feature directions (`in`, `out`, `inout`)
+- Fix flag extraction to use grammar rules, not `contains()`
+
+**2b.4: ElementKind Completeness**
+- Remove ElementKind collapsing (Flow→Connection, etc.)
+- Map all 77 constructible kinds correctly
+
+#### Generation Opportunities
+
+| Component | Source | Approach |
+|-----------|--------|----------|
+| Rule→ElementKind mapping | xtext rule names | Generate lookup table from xtext |
+| Relationship patterns | xtext grammar | Generate extractor patterns |
+| Property extractors | OSLC shapes | Generate from shape constraints |
+| Semantic test assertions | xtext + shapes | Generate expected model structure |
+
+#### Verification Criteria
+
+```bash
+# Ownership verification
+cargo test -p sysml-text-pest test_ownership_creates_membership
+# Expected: Every element has OwningMembership in graph
+
+# Relationship verification
+cargo test -p sysml-text-pest test_specialization_created
+# Expected: `part def A :> B` creates Specialization relationship
+
+# Property verification
+cargo test -p sysml-text-pest test_multiplicity_extracted
+# Expected: `part wheels[4]` has multiplicity lower=4, upper=4
+
+# ElementKind verification
+cargo test -p sysml-text-pest test_all_element_kinds
+# Expected: All 77 constructible kinds can be produced
+```
+
+#### Deliverables
+
+**Generated:**
+- [ ] `codegen/src/rule_mapping_generator.rs` - Generate Rule→ElementKind table
+- [ ] `codegen/src/relationship_extractor_generator.rs` - Generate relationship patterns
+- [ ] `sysml-text-pest/src/extractors.generated.rs` - Property extraction code
+
+**Hand-Written:**
+- [ ] `sysml-text-pest/src/ast/ownership.rs` - Canonical ownership logic
+- [ ] `sysml-text-pest/src/ast/relationships.rs` - Relationship construction
+- [ ] `sysml-text-pest/src/ast/properties.rs` - Property extraction coordination
+
+---
+
+### Phase 2c: Coverage & Validation 🔴 NOT STARTED
+
+**Goal**: Verify parser produces correct semantic models for all SysML v2 constructs.
+
+#### Sub-stages
+
+**2c.1: Corpus Coverage**
+- Fix documentation comment parsing (unblock standard library)
+- Parse all 36 corpus files without errors
+- Shrink allow-list to zero
+
+**2c.2: ElementKind Coverage**
+- Wire actual ElementKind tracking into corpus tests
+- Verify all 77 constructible kinds are produced
+- Generate coverage report
+
+**2c.3: Semantic Correctness Tests**
+- Generate test cases from xtext grammar patterns
+- Verify relationships, ownership, properties for each pattern
+- Add regression tests for semantic mapping
+
+#### Generation Opportunities
+
+| Component | Source | Approach |
+|-----------|--------|----------|
+| Test file patterns | xtext grammar | Generate minimal .sysml for each rule |
+| Expected ElementKinds | xtext rule names | Generate expected kinds per file |
+| Relationship assertions | xtext patterns | Generate expected relationships |
+| Coverage reports | Generated tests | Auto-generate coverage dashboard |
+
+#### Verification Criteria
+
+```bash
+# Corpus coverage
+SYSML_CORPUS_PATH=... cargo test -p sysml-spec-tests -- --ignored
+# Expected: 0 unexpected failures, allow-list empty
+
+# ElementKind coverage
+cargo test -p sysml-spec-tests element_kind_coverage -- --ignored
+# Expected: 77/77 kinds produced (100% coverage)
+
+# Semantic correctness (generated tests)
+cargo test -p sysml-text-pest semantic_
+# Expected: All generated semantic tests pass
+```
+
+#### Deliverables
+
+**Generated:**
+- [ ] `sysml-spec-tests/data/generated_test_patterns/` - Minimal .sysml files
+- [ ] `sysml-spec-tests/src/generated_assertions.rs` - Expected model structure
+- [ ] Coverage dashboard in test output
+
+**Hand-Written:**
+- [ ] Fix for documentation comment grammar precedence
+- [ ] `sysml-spec-tests/tests/semantic_tests.rs` - Semantic verification harness
+
+---
+
+### Overall Phase 2 Success Criteria
+
+| Stage | Criteria | Status |
+|-------|----------|--------|
+| **2a** | Parse valid .sysml files, helpful error messages | ✅ Complete |
+| **2b** | Semantic model with relationships, ownership, properties | 🔴 Not Started |
+| **2c** | 100% corpus, 100% ElementKind, semantic correctness | 🔴 Not Started |
+
+**Phase 2 Complete When:**
+- [ ] All 36 corpus files parse without errors (allow-list empty)
+- [ ] All 77 constructible ElementKinds produced
+- [ ] All relationships (Specialization, Typing, etc.) created
+- [ ] All properties (multiplicity, values, etc.) extracted
+- [ ] Canonical ownership via OwningMembership
+- [ ] Performance: 10K lines in < 1 second
 
 ### Test Examples
 
@@ -866,10 +1053,21 @@ fn spans_track_source_location() {
 ```
 
 ### Deliverables
-- [ ] `sysml-text-syside-sidecar/src/transport.rs` - HTTP client to SySide
-- [ ] `sysml-text-syside-sidecar/src/converter.rs` - SySide JSON → ModelGraph
-- [ ] `sysml-text-syside-sidecar/src/lib.rs` - Parser implementation
-- [ ] Docker setup for SySide service
+
+**Completed:**
+- [x] `codegen/src/pest_generator.rs` - Generate pest grammar from xtext
+- [x] `codegen/src/xtext_parser.rs` - Parse xtext keywords, operators, enums
+- [x] `sysml-text-pest/build.rs` - Orchestrate grammar generation
+- [x] `sysml-text-pest/src/grammar/fragments/` - 12 manual grammar fragments
+- [x] `sysml-text-pest/src/grammar/sysml.pest` - Generated grammar (1527 lines)
+- [x] `sysml-text-pest/src/ast/mod.rs` - AST converter (807 lines)
+- [x] `sysml-text-pest/src/lib.rs` - Parser trait implementation
+- [x] `sysml-spec-tests/` - Coverage testing infrastructure
+
+**Remaining:**
+- [ ] Fix documentation comment precedence in grammar
+- [ ] Expand AST converter to produce all 77 element kinds
+- [ ] Add missing grammar rules for full spec coverage
 - [ ] Integration test suite with real SysML files
 
 ### Grammar Coverage Test Deliverables
@@ -2102,6 +2300,9 @@ The codegen system generates code from multiple spec sources and validates cover
 | Value enumerations (7 types) | ✅ Yes | TTL vocab + JSON | ~400 |
 | Typed property accessors | ✅ Yes | OSLC shapes | ~5000 |
 | Validation methods | ✅ Yes | OSLC shapes | ~3000 |
+| **Pest grammar keywords** | ✅ Yes | xtext | ~200 |
+| **Pest grammar operators** | ✅ Yes | xtext | ~25 |
+| **Pest grammar enums** | ✅ Yes | xtext | ~15 |
 
 ### What's Hand-Written
 
@@ -2156,9 +2357,13 @@ error: build failed
 │  *Kind.json ───────┼──► json_schema_parser.rs ──► enums.generated.rs
 │                    │    (enum values)             (7 enum types)    │
 │                                                                     │
-│  SysML.xtext ──────────► reference for hand-writing parser          │
+│  SysML.xtext ──────────┬─► codegen/src/xtext_parser.rs              │
+│  KerML.xtext ──────────┼─► codegen/src/pest_generator.rs            │
+│  KerMLExpressions.xtext┘     │                                      │
+│                              └─► sysml-text-pest/src/grammar/sysml.pest
+│                                  (174 keywords, 18 operators, 7 enums)
 │                                                                     │
-│  *.sysml test files ──► (future) grammar coverage tests             │
+│  *.sysml test files ──► sysml-spec-tests (corpus coverage tests)    │
 │                                                                     │
 │  SysmlAPISchema.json ─► (future) API response validation            │
 │  OpenAPI.json ────────► (future) endpoint contract tests            │
@@ -2175,8 +2380,20 @@ cargo build -p sysml-core
 # Run codegen tests
 cargo test -p sysml-codegen
 
+# Build pest grammar (triggers generation from xtext)
+cargo build -p sysml-text-pest
+
+# Run parser tests
+cargo test -p sysml-text-pest
+
+# Run corpus coverage tests (requires sysmlv2-references)
+SYSML_CORPUS_PATH=/path/to/sysmlv2-references cargo test -p sysml-spec-tests -- --ignored
+
 # See generated code
 ls target/debug/build/sysml-core-*/out/*.generated.rs
+
+# See generated grammar
+cat sysml-text-pest/src/grammar/sysml.pest | head -100
 ```
 
 ### When Validation Fails

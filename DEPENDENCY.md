@@ -106,17 +106,17 @@ This document describes the strict layering and dependency rules for the sysml-r
 - `sysml-ts`: **NO** dependency on `sysml-core` (CST only)
 - `sysml-ts`: depends only on `sysml-span`
 - `sysml-lsp`: depends on `sysml-span`, `sysml-id`, optionally `sysml-core`
-- `sysml-lsp-server`: depends on `sysml-lsp`, `sysml-text`, `sysml-ts`, `tower-lsp`
+- `sysml-lsp-server`: depends on `sysml-lsp`, `sysml-text`, `sysml-ts`, `sysml-span`, `tower-lsp`, `tokio`
 
 ### Layer 3: Visualization & Execution
 
 **Crates:** `sysml-vis`, `sysml-run`, `sysml-run-statemachine`, `sysml-run-constraints`
 
 **Rules:**
-- `sysml-vis`: depends only on `sysml-core`
-- `sysml-run`: depends only on `sysml-core`
-- `sysml-run-statemachine`: depends on `sysml-run`, `sysml-query`
-- `sysml-run-constraints`: depends on `sysml-run`, `sysml-query`
+- `sysml-vis`: depends on `sysml-core` (plus `serde_json` for export formats)
+- `sysml-run`: depends on `sysml-core`, `sysml-span`
+- `sysml-run-statemachine`: depends on `sysml-run`, `sysml-query`, `sysml-core`, `sysml-span`
+- `sysml-run-constraints`: depends on `sysml-run`, `sysml-query`, `sysml-core`, `sysml-span`
 
 ### Layer 4: Storage
 
@@ -143,7 +143,7 @@ This document describes the strict layering and dependency rules for the sysml-r
 | `uuid` | `sysml-id` | Feature-gated |
 | `tower-lsp` | `sysml-lsp-server` only | LSP protocol |
 | `axum` | `sysml-api` only | HTTP server |
-| `tokio` | `sysml-api`, `sysml-store-postgres` | Async runtime |
+| `tokio` | `sysml-api`, `sysml-store-postgres`, `sysml-lsp-server` | Async runtime |
 | `sqlx` | `sysml-store-postgres` only | Feature-gated |
 | `thiserror` | All crates | Error handling |
 

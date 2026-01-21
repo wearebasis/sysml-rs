@@ -1,79 +1,69 @@
 # sysml-core
 
-Core model types for SysML v2: Element, Relationship, and ModelGraph.
+Core model types for SysML v2: ElementKind, Element, Relationship, and ModelGraph.
 
 ## Purpose
 
 This crate provides the fundamental data structures for representing SysML v2 models:
 
-- **ElementKind**: Types of model elements (Package, Part, Requirement, etc.)
-- **RelationshipKind**: Types of relationships (Owning, Satisfy, Verify, etc.)
-- **Element**: A model element with id, kind, name, owner, properties, and spans
+- **ElementKind**: Generated from the official vocab files (266 kinds)
+- **Value enums**: FeatureDirectionKind, VisibilityKind, and other spec enums
+- **Element**: A model element with id, kind, name, ownership, properties, and spans
 - **Relationship**: A directed relationship between two elements
 - **ModelGraph**: A graph containing elements and relationships with indexes
+- **Ownership helpers**: Membership-based ownership helpers and validation
+- **ElementFactory**: Convenience constructors for common elements
 
 ## Public API
 
-### ElementKind
+### ElementKind (generated)
 
 ```rust
-pub enum ElementKind {
-    Package, Part, Requirement, VerificationCase,
-    StateMachine, State, Transition, Action,
-    Attribute, Document, Unknown(String),
-}
+let kind: ElementKind = "PartUsage".parse().unwrap();
+assert!(kind.is_usage());
+assert!(kind.is_subtype_of(ElementKind::Feature));
 ```
 
-### RelationshipKind
+### Element and ModelGraph
 
 ```rust
-pub enum RelationshipKind {
-    Owning, TypeOf, Satisfy, Verify, Derive,
-    Trace, Reference, Specialize, Redefine,
-    Subsetting, Flow, Transition,
-}
-```
+use sysml_core::{Element, ElementKind, ModelGraph, VisibilityKind};
 
-### Element
+let mut graph = ModelGraph::new();
 
-```rust
-let element = Element::new_with_kind(ElementKind::Part)
-    .with_name("Engine")
-    .with_owner(pkg_id)
-    .with_prop("mass", 150.0)
-    .with_span(span);
+let pkg = Element::new_with_kind(ElementKind::Package)
+    .with_name("VehicleModel");
+let pkg_id = graph.add_element(pkg);
 
-element.get_prop("mass");  // Option<&Value>
+let engine = Element::new_with_kind(ElementKind::PartDefinition)
+    .with_name("Engine");
+let engine_id = graph.add_owned_element(engine, pkg_id.clone(), VisibilityKind::Public);
+
+let req = Element::new_with_kind(ElementKind::RequirementUsage)
+    .with_name("PowerRequirement");
+let req_id = graph.add_owned_element(req, pkg_id.clone(), VisibilityKind::Public);
 ```
 
 ### Relationship
 
 ```rust
-let rel = Relationship::new(RelationshipKind::Satisfy, part_id, req_id)
-    .with_prop("rationale", "Design satisfies safety requirement");
+use sysml_core::{Relationship, RelationshipKind};
+
+let rel = Relationship::new(RelationshipKind::Satisfy, engine_id, req_id);
 ```
 
-### ModelGraph
+### Property accessors (generated)
 
 ```rust
-let mut graph = ModelGraph::new();
-
-// Add elements
-let pkg_id = graph.add_element(package);
-let part_id = graph.add_element(part);
-
-// Add relationships
-graph.add_relationship(relationship);
-
-// Query
-graph.get_element(&id);
-graph.children_of(&owner_id);
-graph.outgoing(&source_id);
-graph.incoming(&target_id);
-graph.elements_by_kind(&ElementKind::Part);
-graph.relationships_by_kind(&RelationshipKind::Satisfy);
-graph.roots();
+let engine = graph.get_element(&engine_id).unwrap();
+let props = engine.as_part_definition().unwrap();
+let name = props.declared_name();
 ```
+
+## RelationshipKind
+
+`RelationshipKind` is a lightweight set of labels used for queries and visualization.
+It is not a full mirror of the SysML v2 relationship taxonomy.
 
 ## Features
 
@@ -85,37 +75,3 @@ graph.roots();
 - `sysml-span`: For Span type
 - `sysml-meta`: For Value type
 - `serde` (optional): Serialization support
-
-## Example
-
-```rust
-use sysml_core::{ModelGraph, Element, Relationship, ElementKind, RelationshipKind};
-
-let mut graph = ModelGraph::new();
-
-// Create a package
-let pkg = Element::new_with_kind(ElementKind::Package)
-    .with_name("VehicleModel");
-let pkg_id = graph.add_element(pkg);
-
-// Create a part
-let engine = Element::new_with_kind(ElementKind::Part)
-    .with_name("Engine")
-    .with_owner(pkg_id.clone());
-let engine_id = graph.add_element(engine);
-
-// Create a requirement
-let req = Element::new_with_kind(ElementKind::Requirement)
-    .with_name("PowerRequirement")
-    .with_owner(pkg_id.clone());
-let req_id = graph.add_element(req);
-
-// Create satisfaction relationship
-let satisfy = Relationship::new(RelationshipKind::Satisfy, engine_id, req_id);
-graph.add_relationship(satisfy);
-
-// Query the graph
-for child in graph.children_of(&pkg_id) {
-    println!("Child: {:?}", child.name);
-}
-```

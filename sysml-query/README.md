@@ -19,7 +19,7 @@ This crate provides higher-level query functions built on top of the core ModelG
 
 ```rust
 // Find by exact name
-let elements = find_by_name(&graph, Some(&ElementKind::Part), "Engine");
+let elements = find_by_name(&graph, Some(&ElementKind::PartUsage), "Engine");
 
 // Find by name pattern (contains)
 let elements = find_by_name_contains(&graph, None, "Req");
@@ -52,9 +52,9 @@ let reqs = requirements_satisfied_by(&graph, &part_id);
 ```rust
 let matrix = trace_matrix(
     &graph,
-    &ElementKind::Part,
+    &ElementKind::PartUsage,
     &RelationshipKind::Satisfy,
-    &ElementKind::Requirement,
+    &ElementKind::RequirementUsage,
 );
 
 for row in matrix {
@@ -77,7 +77,7 @@ let descendants = descendants(&graph, &package_id);
 ```rust
 // Count elements by kind
 let counts = count_elements_by_kind(&graph);
-// {"Package": 1, "Part": 5, "Requirement": 10, ...}
+// {"Package": 1, "PartUsage": 5, "RequirementUsage": 10, ...}
 
 // Count relationships by kind
 let counts = count_relationships_by_kind(&graph);
@@ -91,7 +91,7 @@ let counts = count_relationships_by_kind(&graph);
 ## Example
 
 ```rust
-use sysml_core::{ModelGraph, ElementKind, RelationshipKind};
+use sysml_core::{ElementKind, RelationshipKind};
 use sysml_query::{find_by_name, requirements_unverified, trace_matrix};
 
 // Find all unverified requirements
@@ -102,9 +102,9 @@ for req in requirements_unverified(&graph) {
 // Generate a satisfaction trace matrix
 let matrix = trace_matrix(
     &graph,
-    &ElementKind::Part,
+    &ElementKind::PartUsage,
     &RelationshipKind::Satisfy,
-    &ElementKind::Requirement,
+    &ElementKind::RequirementUsage,
 );
 
 println!("Satisfaction coverage: {} relationships", matrix.len());

@@ -63,6 +63,18 @@ The JSON output is structured as:
 
 Elements and relationships are sorted by their ID strings to ensure deterministic ordering.
 
+## Spec-Backed Canonical JSON-LD (Planned)
+
+Implementation notes for moving from the internal format above to a spec-aligned JSON-LD representation:
+
+- **Source of truth**: `spec/metamodel/schemas.json` and the per-type schemas in `spec/metamodel/*.json`.
+- **Identifiers**: map `ElementId` -> `@id` (UUID), `ElementKind` -> `@type` (SysML type name).
+- **Properties**: emit only schema-defined properties (e.g. `ownedElement`, `ownedRelationship`, `featureMembership`, `documentation`) and validate them against the schema.
+- **Relationships**: serialize Relationship and Membership subtypes as first-class elements, not a separate `relationships` array.
+- **Ownership**: derive `owner` and `owningMembership` from membership elements to match the SysML v2 ownership model.
+- **Determinism**: sort element arrays and property arrays by `@id`; consider JSON canonicalization (RFC 8785) for stable hashing.
+- **Validation**: validate JSON output against the schema and fail serialization if required fields are missing or any unexpected fields appear.
+
 ## Dependencies
 
 - `sysml-core`: Core model types (with serde feature)
