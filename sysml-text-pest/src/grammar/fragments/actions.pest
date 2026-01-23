@@ -37,7 +37,9 @@ AcceptParameterPart = {
 PayloadParameterMember = { PayloadParameter }
 
 PayloadParameter = {
-    Identification? ~ TriggerValuePart
+    // Prevent Identification from consuming trigger keywords (at/after/when)
+    // Use negative lookahead: if next token is TriggerKind, don't match as identifier
+    (!TriggerKind ~ Identification)? ~ TriggerValuePart
     | Identification? ~ PayloadFeatureSpecializationPart ~ ValuePart?
     | Identification ~ ValuePart?
 }
@@ -63,7 +65,9 @@ AssignmentNode = {
     KW_ASSIGN ~ FeatureChainMember ~ ":=" ~ NodeParameterMember ~ ActionBody
 }
 
-FeatureChainMember = { QualifiedName | OwnedFeatureChain }
+// OwnedFeatureChain must come first - it's a longer match (a.b.c)
+// while QualifiedName only handles a single name or A::B paths
+FeatureChainMember = { OwnedFeatureChain | QualifiedName }
 
 TerminateNode = {
     ActionNodePrefix ~ KW_TERMINATE ~ NodeParameterMember? ~ ActionBody
@@ -119,7 +123,9 @@ ActionNodeBody = { ";" | "{" ~ AnnotatingMember* ~ "}" }
 // =============================================================================
 
 TransitionUsage = {
-    KW_TRANSITION ~ (UsageDeclaration? ~ KW_FIRST)? ~
+    KW_TRANSITION ~
+    // Try keyword alternatives before TransitionSourceMember can consume them
+    (UsageDeclaration ~ KW_FIRST | KW_FIRST)? ~
     TransitionSourceMember ~
     TriggerActionMember? ~
     GuardExpressionMember? ~
@@ -138,10 +144,155 @@ GuardExpressionMember = { KW_IF ~ OwnedExpression }
 
 EffectBehaviorMember = { KW_DO ~ EffectBehaviorUsage }
 
+// EffectBehaviorUsage: Action after 'do' in transitions
+// Matches xtext: EmptyActionUsage | PerformedActionUsage ( '{' ActionBodyItem* '}' )?
+// Supports patterns like: do action undockFromStation : UndockFromStation { ... }
 EffectBehaviorUsage = {
-    UsageDeclaration? ~ ("{" ~ ActionBodyItem* ~ "}")?
+    EffectPerformedActionUsage ~ ("{" ~ ActionBodyItem* ~ "}")?
+    | ("{" ~ ActionBodyItem* ~ "}")?  // Empty action body
+}
+
+// EffectPerformedActionUsage: Performed action in effect context
+// Matches xtext PerformedActionUsage with PerformActionUsageDeclaration
+EffectPerformedActionUsage = {
+    KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+    | OwnedReferenceSubsetting ~ FeatureSpecializationPart? ~ ValuePart?
+    | AcceptNodeDeclaration
+    | SendNodeDeclaration
+    | AssignmentNodeDeclaration
 }
 
 TransitionSuccessionMember = { TransitionSuccession }
 
 TransitionSuccession = { ConnectorEndMember }
+
+// =============================================================================
+// TARGET SUCCESSIONS (for action chaining with 'then')
+// =============================================================================
+
+// TargetSuccessionMember: [visibility] ActionTargetSuccession
+// Used after actions in ActionBodyItem to chain with 'then'
+TargetSuccessionMember = { Visibility? ~ ActionTargetSuccession }
+
+// ActionTargetSuccession: (TargetSuccession | GuardedTargetSuccession | DefaultTargetSuccession)
+// Returns a Usage that contains the succession relationship
+// The body is either inline with the target or follows as UsageBody
+ActionTargetSuccession = {
+    TargetSuccession
+    | GuardedTargetSuccession
+    | DefaultTargetSuccession
+}
+
+// TargetSuccession: [multiplicity?] 'then' target [body]
+// The target can be:
+// - A reference to an action: then done;
+// - An inline action usage: then action a { }
+// - A perform action: then perform body;
+// - An assignment: then assign x := 1;
+// - An inline while/for loop: then action whileLoop while ...
+TargetSuccession = {
+    OwnedMultiplicity? ~ KW_THEN ~ SuccessionTarget
+}
+
+// GuardedTargetSuccession: if condition then target [body]
+GuardedTargetSuccession = {
+    GuardExpressionMember ~ KW_THEN ~ SuccessionTarget
+}
+
+// DefaultTargetSuccession: else target [body]
+DefaultTargetSuccession = {
+    KW_ELSE ~ SuccessionTarget
+}
+
+// SuccessionTarget: The target of a succession with its body
+// Can be an inline action node or a simple target with UsageBody
+SuccessionTarget = {
+    // Inline while loop: then action whileLoop while ... { }
+    SuccessionWhileLoopNode
+    // Inline for loop: then action forLoop for ... { }
+    | SuccessionForLoopNode
+    // Inline if node: then action ifAction if ... { }
+    | SuccessionIfNode
+    // Portion usages: then snapshot x; then timeslice y { }
+    | SuccessionPortionUsage ~ UsageBody
+    // State usage: then state x { }
+    | SuccessionStateUsage ~ UsageBody
+    // Action nodes with simple body:
+    // - perform body;
+    // - assign x := 1;
+    | SuccessionActionNodeDeclaration ~ UsageBody
+    // Full action usage: then [private] action a { }
+    | SuccessionActionUsageDeclaration ~ UsageBody
+    // Simple reference: then done;
+    | ConnectorEndMember ~ UsageBody
+}
+
+// SuccessionWhileLoopNode: WhileLoopNode as succession target
+// Pattern: [visibility] [action name] while/loop ... { }
+SuccessionWhileLoopNode = {
+    SuccessionActionNodePrefix ~
+    (KW_WHILE ~ ExpressionParameterMember | KW_LOOP) ~
+    ActionBodyParameterMember ~
+    (KW_UNTIL ~ ExpressionParameterMember ~ ";")?
+}
+
+// SuccessionForLoopNode: ForLoopNode as succession target
+// Pattern: [visibility] [action name] for ... { }
+SuccessionForLoopNode = {
+    SuccessionActionNodePrefix ~
+    KW_FOR ~ ForVariableDeclarationMember ~
+    KW_IN ~ NodeParameterMember ~
+    ActionBodyParameterMember
+}
+
+// SuccessionIfNode: IfNode as succession target
+// Pattern: [visibility] [action name] if ... { } [else ...]
+SuccessionIfNode = {
+    SuccessionActionNodePrefix ~
+    KW_IF ~ ExpressionParameterMember ~
+    ActionBodyParameterMember ~
+    (KW_ELSE ~ (ActionBodyParameterMember | IfNodeParameterMember))?
+}
+
+// SuccessionActionNodePrefix: Prefix for action nodes in succession
+// Includes optional visibility and action declaration
+SuccessionActionNodePrefix = { Visibility? ~ ActionNodeUsageDeclaration? }
+
+// SuccessionActionNodeDeclaration: Action node declarations (without body)
+SuccessionActionNodeDeclaration = {
+    PerformActionNodePrefix ~ OwnedReferenceSubsetting ~ FeatureSpecializationPart? ~ ValuePart?
+    | PerformActionNodePrefix ~ KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+    | AssignmentNodeDeclaration
+    | SendNodeDeclaration
+    | AcceptNodeDeclaration
+}
+
+// PerformActionNodePrefix captures: [visibility] perform
+PerformActionNodePrefix = { Visibility? ~ KW_PERFORM }
+
+// AssignmentNodeDeclaration: assign target := value
+AssignmentNodeDeclaration = { Visibility? ~ KW_ASSIGN ~ FeatureChainMember ~ ":=" ~ NodeParameterMember }
+
+// SendNodeDeclaration: send value [via port] [to target]
+SendNodeDeclaration = { Visibility? ~ KW_SEND ~ NodeParameterMember ~ (KW_VIA ~ NodeParameterMember)? ~ (KW_TO ~ NodeParameterMember)? }
+
+// AcceptNodeDeclaration: accept payload [via port]
+AcceptNodeDeclaration = { Visibility? ~ KW_ACCEPT ~ AcceptParameterPart }
+
+// SuccessionActionUsageDeclaration: Action usage declaration (without body)
+// Handles: then [private] action a
+SuccessionActionUsageDeclaration = {
+    Visibility? ~ KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+}
+
+// SuccessionPortionUsage: Portion usage (snapshot/timeslice) in succession
+// Handles: then snapshot x, then timeslice y
+SuccessionPortionUsage = {
+    Visibility? ~ PortionKind ~ UsageDeclaration? ~ ValuePart?
+}
+
+// SuccessionStateUsage: State usage in succession
+// Handles: then state x
+SuccessionStateUsage = {
+    Visibility? ~ KW_STATE ~ UsageDeclaration? ~ ValuePart?
+}

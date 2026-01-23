@@ -47,8 +47,19 @@ DefinitionBodyItem = {
     | RelationshipMember
     | DefinitionMember
     | VariantUsageMember
+    // Actor/Stakeholder/Subject members (allowed in package bodies as extension)
+    | ActorMember
+    | StakeholderMember
+    | SubjectMember
     | NonOccurrenceUsageMember
-    | OccurrenceUsageMember
+    // OccurrenceUsageMember can be preceded by 'then' (empty succession marker)
+    | OccurrenceUsageMemberWithSuccession
+}
+
+// OccurrenceUsageMember with optional 'then' prefix for successions
+// Pattern: [then [multiplicity]] [visibility] occurrence_usage
+OccurrenceUsageMemberWithSuccession = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ OccurrenceUsageElement
 }
 
 // Subclassification
@@ -128,11 +139,27 @@ ActionDefinition = {
 
 ActionBody = { ";" | "{" ~ ActionBodyItem* ~ "}" }
 
+// ActionBodyItem: Items allowed inside action bodies
+// The xtext grammar has complex patterns for succession handling:
+// - (then)? StructureUsageMember
+// - InitialNodeMember followed by TargetSuccessionMember*
+// - (then)? (BehaviorUsageMember | ActionNodeMember) followed by TargetSuccessionMember*
 ActionBodyItem = {
     DefinitionBodyItem
-    | InitialNodeMember
+    | InitialNodeMember ~ TargetSuccessionMember*
     | ControlNodeMember
-    | ActionNodeMember
+    // Behavior usages (including IncludeUseCaseUsage) with optional then prefix and succession chain
+    | ActionBodyBehaviorMember
+    // Standalone target succession (for else branches etc)
+    | TargetSuccessionMember
+}
+
+// ActionBodyBehaviorMember: Behavior usage element with optional then prefix and succession chain
+// Pattern: [then] (BehaviorUsageElement | ActionNode) [then target]*
+ActionBodyBehaviorMember = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~
+    (BehaviorUsageElement | ActionNode) ~
+    TargetSuccessionMember*
 }
 
 InitialNodeMember = { Visibility? ~ KW_FIRST ~ QualifiedName ~ RelationshipBody }
@@ -148,18 +175,67 @@ StateDefinition = {
 StateBody = { ";" | KW_PARALLEL? ~ "{" ~ StateBodyItem* ~ "}" }
 
 StateBodyItem = {
-    DefinitionBodyItem
-    | EntryActionMember
+    // Entry/Do/Exit with optional transitions after - must come first!
+    // Pattern: entry; then off;
+    EntryActionMember ~ EntryTransitionMember*
     | DoActionMember
     | ExitActionMember
     | TransitionUsageMember
+    | Import
+    | AliasMember
+    | AnnotatingMember
+    | DefinitionMember
+    | VariantUsageMember
+    | NonOccurrenceUsageMember
+    // Structure usages with optional 'then' prefix
+    | (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ StructureUsageElement
+    // Behavior usages with optional accept/transitions
+    | StateBodyBehaviorItem
+}
+
+// StateBodyBehaviorItem: Behavior usage followed by optional transitions
+// Handles: accept SigSwitchOn then standBy;
+StateBodyBehaviorItem = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ BehaviorUsageElement ~ TargetTransitionMember*
+}
+
+// TargetTransitionMember: Transition after a behavior usage in state body
+// Handles: then standBy; or accept trigger then target;
+TargetTransitionMember = { Visibility? ~ TargetTransitionUsage }
+
+// TargetTransitionUsage: A transition usage targeting a state
+// Can have optional trigger, guard, effect before 'then target'
+TargetTransitionUsage = {
+    (
+        KW_TRANSITION ~ TriggerActionMember? ~ GuardExpressionMember? ~ EffectBehaviorMember?
+        | TriggerActionMember ~ GuardExpressionMember? ~ EffectBehaviorMember?
+        | GuardExpressionMember ~ EffectBehaviorMember?
+    )? ~
+    KW_THEN ~ TransitionSuccessionMember ~ ActionBody
 }
 
 EntryActionMember = { Visibility? ~ KW_ENTRY ~ StateActionUsage }
 DoActionMember = { Visibility? ~ KW_DO ~ StateActionUsage }
 ExitActionMember = { Visibility? ~ KW_EXIT ~ StateActionUsage }
 
-StateActionUsage = { ";" | UsageDeclaration? ~ ActionBody }
+// EntryTransitionMember: Transition after entry action
+// Handles: entry; then off;
+EntryTransitionMember = { Visibility? ~ (GuardedTargetSuccession | KW_THEN ~ TransitionSuccession) ~ ";" }
+
+// StateActionUsage supports:
+// - Empty: ";"
+// - PerformedActionUsage: (OwnedReferenceSubsetting | "action" UsageDeclaration?) ValuePart? ActionBody
+StateActionUsage = {
+    ";"
+    | PerformedActionUsageDeclaration ~ ValuePart? ~ ActionBody
+}
+
+// KW_ACTION first - if we see 'action' keyword, use that branch.
+// Otherwise fall back to OwnedReferenceSubsetting for patterns like `:>> someAction`
+PerformedActionUsageDeclaration = {
+    KW_ACTION ~ UsageDeclaration?
+    | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+}
 
 TransitionUsageMember = { Visibility? ~ TransitionUsage }
 
@@ -192,8 +268,22 @@ RequirementBodyItem = {
     DefinitionBodyItem
     | SubjectMember
     | RequirementConstraintMember
+    | FramedConcernMember
     | ActorMember
     | StakeholderMember
+}
+
+// FramedConcernMember: 'frame' concern_usage
+// Pattern: frame concern ConcernName;
+FramedConcernMember = { Visibility? ~ KW_FRAME ~ FramedConcernUsage }
+
+// FramedConcernUsage supports:
+// 1. Reference subsetting: :>> concernRef { ... }
+// 2. With 'concern' keyword: concern [name] [body]
+FramedConcernUsage = {
+    OwnedReferenceSubsetting ~ FeatureSpecialization* ~ RequirementBody
+    | (PrefixMetadata* ~ KW_CONCERN | PrefixMetadata+) ~
+        UsageDeclaration? ~ ValuePart? ~ RequirementBody
 }
 
 SubjectMember = { Visibility? ~ KW_SUBJECT ~ SubjectUsage }
@@ -203,8 +293,14 @@ RequirementConstraintMember = {
     Visibility? ~ RequirementConstraintKind ~ RequirementConstraintUsage
 }
 // Note: RequirementConstraintKind is generated from xtext enums
+// RequirementConstraintUsage supports:
+// 1. Reference subsetting: :>> constraintRef { ... }
+// 2. With 'constraint' keyword: constraint [name] { ... }
+// 3. Inline expression: { expr }
 RequirementConstraintUsage = {
     OwnedReferenceSubsetting ~ FeatureSpecialization* ~ CalculationBody
+    | (PrefixMetadata* ~ KW_CONSTRAINT | PrefixMetadata+) ~
+        UsageDeclaration? ~ ValuePart? ~ CalculationBody
     | UsageDeclaration? ~ CalculationBody
 }
 

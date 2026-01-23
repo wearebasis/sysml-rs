@@ -7,8 +7,11 @@ UsageElement = {
     | OccurrenceUsageElement
 }
 
+// DefaultReferenceUsage MUST come first - it matches usages without explicit keyword
+// like "in x: Type" or "out y[0..*]: SomeType"
 NonOccurrenceUsageElement = {
-    ReferenceUsage
+    DefaultReferenceUsage
+    | ReferenceUsage
     | AttributeUsage
     | EnumerationUsage
     | BindingConnectorAsUsage
@@ -32,7 +35,9 @@ StructureUsageElement = {
     | ConnectionUsage
     | InterfaceUsage
     | AllocationUsage
+    | SuccessionFlowUsage
     | FlowConnectionUsage
+    | MessageUsage
     | ViewUsage
     | RenderingUsage
 }
@@ -72,8 +77,24 @@ RefPrefix = { FeatureDirectionKind? ~ BasicDefinitionPrefix? ~ Readonly? ~ Deriv
 Reference = { KW_REF }
 EndUsagePrefix = { End ~ OwnedCrossingFeatureMember? }
 UsageExtensionKeyword = { PrefixMetadataMember }
-OwnedCrossingFeatureMember = { OwnedCrossingFeature }
+// OwnedCrossingFeatureMember must NOT match usage keywords (occurrence, port, etc.)
+// It's only for cross-features with explicit prefix modifiers (in/out/ref/etc.)
+OwnedCrossingFeatureMember = { !UsageKeywordLookahead ~ OwnedCrossingFeature }
 OwnedCrossingFeature = { BasicUsagePrefix? ~ UsageDeclaration }
+
+// Lookahead for usage keywords that should NOT be consumed by OwnedCrossingFeatureMember
+// or DefaultReferenceUsage (prevents keywords from being parsed as identifiers)
+UsageKeywordLookahead = {
+    KW_OCCURRENCE | KW_ITEM | KW_PART | KW_PORT | KW_CONNECTION |
+    KW_INTERFACE | KW_ALLOCATION | KW_FLOW | KW_ACTION | KW_STATE |
+    KW_CONSTRAINT | KW_REQUIREMENT | KW_CONCERN | KW_CASE | KW_ANALYSIS |
+    KW_VERIFICATION | KW_VIEW | KW_VIEWPOINT | KW_RENDERING | KW_EVENT |
+    KW_ATTRIBUTE | KW_ENUM | KW_CALC | KW_REF | KW_SUCCESSION | KW_BIND |
+    KW_BINDING | KW_ALLOCATE | KW_CONNECT | KW_PERFORM | KW_EXHIBIT |
+    KW_INCLUDE | KW_SATISFY | KW_ASSERT | KW_USE |
+    // Actor/Subject/Stakeholder keywords (for package body extension)
+    KW_ACTOR | KW_SUBJECT | KW_STAKEHOLDER
+}
 
 UsageDeclaration = { FeatureDeclaration }
 
@@ -86,8 +107,10 @@ ReferenceUsage = {
     (EndUsagePrefix | RefPrefix) ~ KW_REF ~ UsageDeclaration? ~ UsageCompletion
 }
 
+// !UsageKeywordLookahead prevents matching when usage keyword follows (e.g., "inout part x")
+// Otherwise DefaultReferenceUsage would match "inout" and treat "part" as an identifier name
 DefaultReferenceUsage = {
-    End? ~ RefPrefix ~ UsageDeclaration? ~ UsageCompletion
+    End? ~ RefPrefix ~ !UsageKeywordLookahead ~ UsageDeclaration? ~ UsageCompletion
 }
 
 AttributeUsage = {
@@ -120,8 +143,9 @@ PortionUsage = {
 
 EventOccurrenceUsage = {
     OccurrenceUsagePrefix ~ KW_EVENT ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_OCCURRENCE ~ UsageDeclaration?
+        // KW_OCCURRENCE must come first - otherwise "occurrence" matches as QualifiedName
+        KW_OCCURRENCE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ UsageCompletion
 }
 
@@ -187,10 +211,43 @@ FlowConnectionUsage = {
     OccurrenceUsagePrefix ~ KW_FLOW ~ FlowConnectionDeclaration ~ DefinitionBody
 }
 
+SuccessionFlowUsage = {
+    OccurrenceUsagePrefix ~ KW_SUCCESSION ~ KW_FLOW ~ FlowConnectionDeclaration ~ DefinitionBody
+}
+
+MessageUsage = {
+    OccurrenceUsagePrefix ~ KW_MESSAGE ~ MessageDeclaration ~ DefinitionBody
+}
+
+MessageDeclaration = {
+    MessageEventMember ~ KW_TO ~ MessageEventMember
+    | UsageDeclaration? ~ ValuePart? ~ (KW_OF ~ PayloadFeatureMember)? ~
+        (KW_FROM ~ MessageEventMember ~ KW_TO ~ MessageEventMember)?
+}
+
+PayloadFeatureMember = { ItemFeature }
+
+MessageEventMember = { OwnedExpression }
+
+// FlowConnectionDeclaration: Ordered alternatives for PEG
+// CRITICAL: Try keyword-starting patterns FIRST to prevent keywords being parsed as identifiers
 FlowConnectionDeclaration = {
-    FlowEndMember ~ KW_TO ~ FlowEndMember
-    | UsageDeclaration? ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)? ~
-        (KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember)?
+    // Pattern 1: Bare 'from a.x to b.y'
+    KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 2: 'of item from ... to ...' (no declaration)
+    | KW_OF ~ ItemFeatureMember ~ KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 3: 'of item' only (no endpoints)
+    | KW_OF ~ ItemFeatureMember
+    // Pattern 4: With declaration then 'from'
+    | UsageDeclaration ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)? ~
+        KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 5: With declaration then 'of' then 'from'
+    | UsageDeclaration ~ ValuePart? ~ KW_OF ~ ItemFeatureMember ~
+        KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 6: Direct endpoints 'a.x to b.y' (no 'from')
+    | FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 7: Declaration with optional 'of' (no endpoints)
+    | UsageDeclaration ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)?
 }
 
 ItemFeatureMember = { ItemFeature }
@@ -233,8 +290,8 @@ ActionUsage = {
 
 PerformActionUsage = {
     OccurrenceUsagePrefix ~ KW_PERFORM ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_ACTION ~ UsageDeclaration?
+        KW_ACTION ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ ActionBody
 }
 
@@ -248,8 +305,8 @@ StateUsage = {
 
 ExhibitStateUsage = {
     OccurrenceUsagePrefix ~ KW_EXHIBIT ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_STATE ~ UsageDeclaration?
+        KW_STATE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ StateBody
 }
 
@@ -259,8 +316,8 @@ ConstraintUsage = {
 
 AssertConstraintUsage = {
     OccurrenceUsagePrefix ~ KW_ASSERT ~ KW_NOT? ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart?
+        KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ CalculationBody
 }
 
@@ -270,8 +327,8 @@ RequirementUsage = {
 
 SatisfyRequirementUsage = {
     OccurrenceUsagePrefix ~ KW_ASSERT? ~ KW_NOT? ~ KW_SATISFY ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_REQUIREMENT ~ UsageDeclaration?
+        KW_REQUIREMENT ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ (KW_BY ~ SatisfactionSubjectMember)? ~ RequirementBody
 }
 
@@ -303,8 +360,8 @@ UseCaseUsage = {
 
 IncludeUseCaseUsage = {
     OccurrenceUsagePrefix ~ KW_INCLUDE ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_USE ~ KW_CASE ~ UsageDeclaration?
+        KW_USE ~ KW_CASE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ CaseBody
 }
 

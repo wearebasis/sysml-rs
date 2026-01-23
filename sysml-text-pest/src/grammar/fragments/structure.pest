@@ -27,6 +27,10 @@ PackageBodyElement = {
     | AliasMember
     | ElementFilterMember
     | AnnotatingMember
+    // Actor/Subject/Stakeholder members (allowed in package bodies as extension)
+    | ActorMember
+    | StakeholderMember
+    | SubjectMember
     | UsageMember
     | DefinitionMember
     | RelationshipMember
@@ -42,8 +46,10 @@ Import = {
 
 ImportPrefix = { Visibility? ~ KW_IMPORT ~ ImportAll? }
 
+// ImportedReference: QualifiedName with optional ::* or ::** suffix
+// IMPORTANT: Try ::** BEFORE ::* since ::* is a prefix of ::**
 ImportedReference = {
-    QualifiedName ~ ImportNamespaceMarker? ~ ImportRecursiveMarker?
+    QualifiedName ~ (ImportRecursiveMarker | ImportNamespaceMarker)?
 }
 
 ImportNamespaceMarker = { "::*" }

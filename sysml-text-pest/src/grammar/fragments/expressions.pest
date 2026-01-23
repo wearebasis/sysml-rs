@@ -9,9 +9,10 @@ OwnedExpressionMember = { OwnedExpression }
 OwnedExpressionReference = { OwnedExpressionMember }
 
 // Conditional Expressions
+// ConcreteConditionalExpression must come first - otherwise "if" matches as identifier
 ConditionalExpression = {
-    NullCoalescingExpression
-    | ConcreteConditionalExpression
+    ConcreteConditionalExpression
+    | NullCoalescingExpression
 }
 
 ConcreteConditionalExpression = {
@@ -48,8 +49,10 @@ XorExpression = {
     AndExpression ~ (KW_XOR ~ AndExpression)*
 }
 
+// AndExpression: supports && (conditional), & (bitwise), and 'and' (keyword)
+// Note: "&&" must come BEFORE "&" (longer match first)
 AndExpression = {
-    EqualityExpression ~ (("&" ~ EqualityExpression) | (KW_AND ~ EqualityExpressionReference))*
+    EqualityExpression ~ (("&&" ~ EqualityExpressionReference) | ("&" ~ EqualityExpression) | (KW_AND ~ EqualityExpressionReference))*
 }
 
 EqualityExpressionReference = { EqualityExpressionMember }
@@ -133,12 +136,15 @@ PrimaryExpression = {
 }
 
 // Base Expressions
+// Note: InvocationExpression must come BEFORE FeatureReferenceExpression
+// because InvocationExpression is more specific (name + argument list)
+// and FeatureReferenceExpression would match just the name, leaving ()
 BaseExpression = {
     NullExpression
     | LiteralExpression
-    | FeatureReferenceExpression
     | MetadataAccessExpression
     | InvocationExpression
+    | FeatureReferenceExpression
     | BodyExpression
     | "(" ~ SequenceExpression ~ ")"
 }
