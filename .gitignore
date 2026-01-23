@@ -1,8 +1,23 @@
+# Rust build artifacts
 /target/
 **/target/
 **/*.rs.bk
+
+# Editor files
 **/*.swp
 .DS_Store
 .idea/
 .vscode/
+
+# Node.js (for sysml-web-vis and any JS tooling)
 node_modules/
+dist/
+*.log
+package-lock.json
+
+# Generated files
+*.generated.rs
+*.svg
+
+# OS files
+Thumbs.db
