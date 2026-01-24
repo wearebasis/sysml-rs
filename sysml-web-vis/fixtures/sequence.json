@@ -1,0 +1,198 @@
+{
+  "version": "0.2",
+  "view": "SequenceView",
+  "viewMetadata": {
+    "title": "Sequence View",
+    "subtitle": "UI Interaction",
+    "subject": "User Journey",
+    "compartmentMode": "graphical"
+  },
+  "nodes": [
+    {
+      "id": "sequence-main",
+      "kind": "SequenceView",
+      "name": "Page Selection Flow",
+      "position": { "x": 40, "y": 40 },
+      "size": { "width": 760, "height": 420 },
+      "compartments": [
+        {
+          "id": "sequence-context",
+          "kind": "text",
+          "title": "context",
+          "lines": ["UI request/response with service."]
+        },
+        {
+          "id": "sequence-lifelines",
+          "kind": "graphical",
+          "nodeIds": ["lifeline-ui", "lifeline-controller", "lifeline-service"]
+        }
+      ]
+    },
+    {
+      "id": "fragment-loop",
+      "kind": "CombinedFragment",
+      "name": "loop",
+      "parentId": "sequence-main",
+      "position": { "x": 60, "y": 120 },
+      "size": { "width": 720, "height": 140 }
+    },
+    {
+      "id": "fragment-alt",
+      "kind": "CombinedFragment",
+      "name": "alt",
+      "parentId": "sequence-main",
+      "position": { "x": 60, "y": 260 },
+      "size": { "width": 720, "height": 140 }
+    },
+    {
+      "id": "lifeline-ui",
+      "kind": "Lifeline",
+      "name": "UI",
+      "parentId": "sequence-main",
+      "position": { "x": 80, "y": 60 },
+      "size": { "width": 180, "height": 360 }
+    },
+    {
+      "id": "lifeline-controller",
+      "kind": "Lifeline",
+      "name": "Controller",
+      "parentId": "sequence-main",
+      "position": { "x": 340, "y": 60 },
+      "size": { "width": 180, "height": 360 }
+    },
+    {
+      "id": "lifeline-service",
+      "kind": "Lifeline",
+      "name": "Service",
+      "parentId": "sequence-main",
+      "position": { "x": 600, "y": 60 },
+      "size": { "width": 180, "height": 360 }
+    },
+    {
+      "id": "event-ui-send",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-ui",
+      "position": { "x": 0, "y": 150 }
+    },
+    {
+      "id": "event-controller-recv",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 150 }
+    },
+    {
+      "id": "event-controller-send",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 210 }
+    },
+    {
+      "id": "event-service-recv",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-service",
+      "position": { "x": 0, "y": 210 }
+    },
+    {
+      "id": "event-controller-async-send",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 240 }
+    },
+    {
+      "id": "event-service-async-recv",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-service",
+      "position": { "x": 0, "y": 240 }
+    },
+    {
+      "id": "event-service-send",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-service",
+      "position": { "x": 0, "y": 270 }
+    },
+    {
+      "id": "activation-ui",
+      "kind": "Activation",
+      "parentId": "lifeline-ui",
+      "position": { "x": 0, "y": 150 },
+      "size": { "width": 12, "height": 170 }
+    },
+    {
+      "id": "activation-controller",
+      "kind": "Activation",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 150 },
+      "size": { "width": 12, "height": 150 }
+    },
+    {
+      "id": "activation-service",
+      "kind": "Activation",
+      "parentId": "lifeline-service",
+      "position": { "x": 0, "y": 210 },
+      "size": { "width": 12, "height": 110 }
+    },
+    {
+      "id": "event-controller-recv-2",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 270 }
+    },
+    {
+      "id": "event-controller-send-2",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-controller",
+      "position": { "x": 0, "y": 320 }
+    },
+    {
+      "id": "event-ui-recv",
+      "kind": "EventOccurrence",
+      "parentId": "lifeline-ui",
+      "position": { "x": 0, "y": 320 }
+    }
+  ],
+  "links": [
+    {
+      "id": "msg-1",
+      "kind": "Message",
+      "source": { "nodeId": "event-ui-send" },
+      "target": { "nodeId": "event-controller-recv" },
+      "labels": [{ "text": "selectPage()" }]
+    },
+    {
+      "id": "msg-2",
+      "kind": "Message",
+      "source": { "nodeId": "event-controller-send" },
+      "target": { "nodeId": "event-service-recv" },
+      "labels": [{ "text": "fetchModel()" }],
+      "flowItem": { "itemLabel": "Model" }
+    },
+    {
+      "id": "succession-1",
+      "kind": "Succession",
+      "source": { "nodeId": "event-controller-recv" },
+      "target": { "nodeId": "event-controller-send" },
+      "labels": [{ "text": "next" }]
+    },
+    {
+      "id": "msg-async",
+      "kind": "AsyncMessage",
+      "source": { "nodeId": "event-controller-async-send" },
+      "target": { "nodeId": "event-service-async-recv" },
+      "labels": [{ "text": "notify()" }]
+    },
+    {
+      "id": "msg-3",
+      "kind": "ReturnMessage",
+      "source": { "nodeId": "event-service-send" },
+      "target": { "nodeId": "event-controller-recv-2" },
+      "labels": [{ "text": "modelReady" }]
+    },
+    {
+      "id": "msg-4",
+      "kind": "Message",
+      "source": { "nodeId": "event-controller-send-2" },
+      "target": { "nodeId": "event-ui-recv" },
+      "labels": [{ "text": "render()" }]
+    }
+  ]
+}

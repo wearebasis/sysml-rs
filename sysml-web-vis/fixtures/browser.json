@@ -1,0 +1,102 @@
+{
+  "version": "0.2",
+  "view": "BrowserView",
+  "viewMetadata": {
+    "title": "Browser View",
+    "subtitle": "Model Hierarchy",
+    "subject": "VehicleProject",
+    "compartmentMode": "textual",
+    "sortBy": "kind",
+    "sortOrder": "asc"
+  },
+  "nodes": [
+    {
+      "id": "pkg-root",
+      "kind": "Package",
+      "name": "VehicleProject",
+      "icon": "PKG"
+    },
+    {
+      "id": "pkg-defs",
+      "kind": "Package",
+      "name": "Definitions",
+      "icon": "PKG",
+      "parentId": "pkg-root",
+      "collapsed": true
+    },
+    {
+      "id": "pkg-reqs",
+      "kind": "Package",
+      "name": "Requirements",
+      "icon": "PKG",
+      "parentId": "pkg-root"
+    },
+    {
+      "id": "pkg-views",
+      "kind": "Package",
+      "name": "Views",
+      "icon": "PKG",
+      "parentId": "pkg-root"
+    },
+    {
+      "id": "def-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "parentId": "pkg-defs"
+    },
+    {
+      "id": "def-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "parentId": "pkg-defs"
+    },
+    {
+      "id": "usage-vehicle",
+      "kind": "PartUsage",
+      "name": "vehicle1",
+      "parentId": "def-vehicle"
+    },
+    {
+      "id": "usage-engine",
+      "kind": "PartUsage",
+      "name": "engine1",
+      "parentId": "def-engine"
+    },
+    {
+      "id": "req-safety",
+      "kind": "RequirementDefinition",
+      "name": "SafetyReq",
+      "icon": "REQ",
+      "parentId": "pkg-reqs"
+    },
+    {
+      "id": "req-emissions",
+      "kind": "RequirementDefinition",
+      "name": "EmissionsReq",
+      "icon": "REQ",
+      "parentId": "pkg-reqs"
+    },
+    {
+      "id": "view-def",
+      "kind": "ViewDefinition",
+      "name": "SafetyView",
+      "icon": "VIEW",
+      "parentId": "pkg-views"
+    },
+    {
+      "id": "viewpoint-def",
+      "kind": "ViewpointDefinition",
+      "name": "SafetyViewpoint",
+      "icon": "VIEWPOINT",
+      "parentId": "pkg-views"
+    },
+    {
+      "id": "concern-def",
+      "kind": "ConcernDefinition",
+      "name": "SafetyConcern",
+      "icon": "CONCERN",
+      "parentId": "pkg-views"
+    }
+  ],
+  "links": []
+}

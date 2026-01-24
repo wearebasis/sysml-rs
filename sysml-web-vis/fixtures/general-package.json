@@ -1,0 +1,85 @@
+{
+  "version": "0.2",
+  "view": "GeneralView",
+  "viewMetadata": {
+    "title": "Package Diagram",
+    "subtitle": "VehicleProject",
+    "subject": "VehicleProject",
+    "compartmentMode": "textual"
+  },
+  "nodes": [
+    {
+      "id": "pkg-root",
+      "kind": "Package",
+      "name": "VehicleProject",
+      "icon": "PKG",
+      "position": { "x": 60, "y": 60 }
+    },
+    {
+      "id": "pkg-defs",
+      "kind": "Package",
+      "name": "Definitions",
+      "icon": "PKG",
+      "position": { "x": 320, "y": 60 }
+    },
+    {
+      "id": "pkg-reqs",
+      "kind": "Package",
+      "name": "Requirements",
+      "icon": "PKG",
+      "position": { "x": 580, "y": 60 }
+    },
+    {
+      "id": "pkg-analysis",
+      "kind": "Package",
+      "name": "Analysis",
+      "icon": "PKG",
+      "position": { "x": 320, "y": 220 }
+    },
+    {
+      "id": "pkg-views",
+      "kind": "Package",
+      "name": "Views",
+      "icon": "PKG",
+      "position": { "x": 580, "y": 220 }
+    }
+  ],
+  "links": [
+    {
+      "id": "contains-root-defs",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-defs" }
+    },
+    {
+      "id": "contains-root-reqs",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-reqs" }
+    },
+    {
+      "id": "contains-root-analysis",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-analysis" }
+    },
+    {
+      "id": "contains-root-views",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-views" }
+    },
+    {
+      "id": "import-defs-reqs",
+      "kind": "Import",
+      "source": { "nodeId": "pkg-defs" },
+      "target": { "nodeId": "pkg-reqs" }
+    },
+    {
+      "id": "merge-analysis-defs",
+      "kind": "Merge",
+      "source": { "nodeId": "pkg-analysis" },
+      "target": { "nodeId": "pkg-defs" }
+    }
+  ]
+}

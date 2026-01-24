@@ -10,10 +10,13 @@ use crate::xtext_parser::{KeywordInfo, OperatorInfo, XtextEnumInfo};
 
 /// Generate pest keyword rules from xtext keyword definitions.
 ///
-/// Each keyword is converted to a rule like:
+/// Each keyword is converted to an atomic rule with word boundary checking:
 /// ```pest
-/// KW_ABSTRACT = { "abstract" }
+/// KW_ABSTRACT = @{ "abstract" ~ !(ASCII_ALPHANUMERIC | "_") }
 /// ```
+///
+/// The word boundary check prevents partial matching (e.g., "in" matching
+/// the start of "interface" or "inout").
 ///
 /// # Arguments
 ///
@@ -26,6 +29,7 @@ pub fn generate_pest_keywords(keywords: &[KeywordInfo]) -> String {
     let mut output = String::new();
     output.push_str("// =============================================================================\n");
     output.push_str("// KEYWORDS (Generated from SysML.xtext)\n");
+    output.push_str("// Keywords use word boundary checking to prevent partial matching.\n");
     output.push_str("// =============================================================================\n\n");
 
     // Collect unique keywords (some may be defined in multiple rules)
@@ -39,7 +43,11 @@ pub fn generate_pest_keywords(keywords: &[KeywordInfo]) -> String {
 
     // Generate the rules, sorted alphabetically by pest name
     for (pest_name, keyword) in &unique_keywords {
-        output.push_str(&format!("{} = {{ \"{}\" }}\n", pest_name, keyword));
+        // Use atomic rule (@) with word boundary check to prevent partial matching
+        output.push_str(&format!(
+            "{} = @{{ \"{}\" ~ !(ASCII_ALPHANUMERIC | \"_\") }}\n",
+            pest_name, keyword
+        ));
     }
 
     output
@@ -51,10 +59,13 @@ pub fn generate_pest_keywords(keywords: &[KeywordInfo]) -> String {
 /// works with keyword strings directly, useful when keywords are extracted
 /// from all quoted strings in xtext rather than just dedicated keyword rules.
 ///
-/// Each keyword is converted to a rule like:
+/// Each keyword is converted to an atomic rule with word boundary checking:
 /// ```pest
-/// KW_ABSTRACT = { "abstract" }
+/// KW_ABSTRACT = @{ "abstract" ~ !(ASCII_ALPHANUMERIC | "_") }
 /// ```
+///
+/// The word boundary check prevents partial matching (e.g., "in" matching
+/// the start of "interface" or "inout").
 ///
 /// # Arguments
 ///
@@ -67,6 +78,7 @@ pub fn generate_pest_keywords_from_strings(keywords: &[String]) -> String {
     let mut output = String::new();
     output.push_str("// =============================================================================\n");
     output.push_str("// KEYWORDS (Generated from SysML/KerML xtext files)\n");
+    output.push_str("// Keywords use word boundary checking to prevent partial matching.\n");
     output.push_str("// =============================================================================\n\n");
 
     // Generate rules sorted alphabetically
@@ -75,7 +87,12 @@ pub fn generate_pest_keywords_from_strings(keywords: &[String]) -> String {
 
     for keyword in &sorted_keywords {
         let pest_name = format!("KW_{}", keyword.to_uppercase());
-        output.push_str(&format!("{} = {{ \"{}\" }}\n", pest_name, keyword));
+        // Use atomic rule (@) with word boundary check to prevent partial matching
+        // e.g., "in" should not match the start of "interface" or "inout"
+        output.push_str(&format!(
+            "{} = @{{ \"{}\" ~ !(ASCII_ALPHANUMERIC | \"_\") }}\n",
+            pest_name, keyword
+        ));
     }
 
     output
@@ -178,7 +195,10 @@ pub fn generate_pest_enums(enums: &[XtextEnumInfo]) -> String {
     // Generate rules for each unique type
     for (type_name, keywords) in type_to_keywords {
         if !keywords.is_empty() {
-            let alternatives: Vec<_> = keywords.into_iter().collect();
+            // Sort keywords by length (descending) for proper PEG matching
+            // This ensures "KW_INOUT" comes before "KW_IN" since "in" is a prefix of "inout"
+            let mut alternatives: Vec<_> = keywords.into_iter().collect();
+            alternatives.sort_by(|a, b| b.len().cmp(&a.len()));
             output.push_str(&format!(
                 "{} = {{ {} }}\n",
                 type_name,
@@ -300,8 +320,9 @@ mod tests {
         ];
 
         let output = generate_pest_keywords(&keywords);
-        assert!(output.contains("KW_ACTION = { \"action\" }"));
-        assert!(output.contains("KW_STATE = { \"state\" }"));
+        // Keywords should have word boundary checking with atomic rule (@)
+        assert!(output.contains("KW_ACTION = @{ \"action\" ~ !(ASCII_ALPHANUMERIC | \"_\") }"));
+        assert!(output.contains("KW_STATE = @{ \"state\" ~ !(ASCII_ALPHANUMERIC | \"_\") }"));
     }
 
     #[test]
@@ -337,7 +358,8 @@ mod tests {
         }];
 
         let output = generate_pest_enums(&enums);
-        // Values are sorted alphabetically due to BTreeSet usage
-        assert!(output.contains("FeatureDirectionKind = { KW_IN | KW_INOUT | KW_OUT }"));
+        // Enum values are sorted by length descending for proper PEG matching
+        // (longer keywords first to prevent prefix matching issues)
+        assert!(output.contains("FeatureDirectionKind = { KW_INOUT | KW_OUT | KW_IN }"));
     }
 }

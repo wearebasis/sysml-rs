@@ -2,10 +2,33 @@
 // FEATURES
 // =============================================================================
 
+// FeatureDeclaration matches xtext:
+// Identification FeatureSpecializationPart? | FeatureSpecializationPart
+// Note: FeatureSpecializationPart first to handle contextual keywords (redefines, etc.)
+// When input starts with specialization syntax (:, :>, :>>, etc.), match anonymous feature.
+// Otherwise, match Identification with optional specialization.
+// FeatureRelationshipPart* is appended for chains, inverse of, featured by
 FeatureDeclaration = {
-    Identification ~ FeatureSpecializationPart?
-    | FeatureSpecializationPart
+    FeatureSpecializationPart ~ FeatureRelationshipPart*
+    | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
 }
+
+// KerML Feature Relationship Parts (chains, inverse of, featured by)
+// These follow the FeatureSpecializationPart in FeatureDeclaration
+FeatureRelationshipPart = {
+    ChainingPart
+    | InvertingPart
+    | TypeFeaturingPart
+}
+
+// chains <qualified-name> | chains <feature-chain>
+ChainingPart = { KW_CHAINS ~ (OwnedFeatureChain | QualifiedName) }
+
+// inverse of <feature>
+InvertingPart = { KW_INVERSE ~ KW_OF ~ (OwnedFeatureChain | QualifiedName) }
+
+// featured by <type> [, <type>]*
+TypeFeaturingPart = { KW_FEATURED ~ KW_BY ~ QualifiedName ~ ("," ~ QualifiedName)* }
 
 FeatureSpecializationPart = {
     FeatureSpecialization+ ~ (MultiplicityPart ~ FeatureSpecialization*)?
@@ -28,7 +51,8 @@ FeatureTyping = { OwnedFeatureTyping | ConjugatedPortTyping }
 
 OwnedFeatureTyping = { FeatureType }
 
-FeatureType = { QualifiedName | OwnedFeatureChain }
+// OwnedFeatureChain first - longer match (a.b.c) vs QualifiedName (a or A::B)
+FeatureType = { OwnedFeatureChain | QualifiedName }
 
 ConjugatedPortTyping = { "~" ~ QualifiedName }
 
@@ -36,21 +60,21 @@ Subsettings = { Subsets ~ ("," ~ OwnedSubsetting)* }
 
 Subsets = { SubsetsToken ~ OwnedSubsetting }
 
-OwnedSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedSubsetting = { OwnedFeatureChain | QualifiedName }
 
 References_ = { ReferencesToken ~ OwnedReferenceSubsetting }
 
-OwnedReferenceSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedReferenceSubsetting = { OwnedFeatureChain | QualifiedName }
 
 Crosses = { CrossesToken ~ OwnedCrossSubsetting }
 
-OwnedCrossSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedCrossSubsetting = { OwnedFeatureChain | QualifiedName }
 
 Redefinitions = { Redefines ~ ("," ~ OwnedRedefinition)* }
 
 Redefines = { RedefinesToken ~ OwnedRedefinition }
 
-OwnedRedefinition = { QualifiedName | OwnedFeatureChain }
+OwnedRedefinition = { OwnedFeatureChain | QualifiedName }
 
 // Feature chains
 OwnedFeatureChain = { FeatureChain }

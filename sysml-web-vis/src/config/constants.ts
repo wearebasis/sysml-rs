@@ -1,0 +1,72 @@
+export const CONTAINER_PADDING = { left: 20, right: 20, top: 56, bottom: 20 };
+
+export const COLLAPSED_CONTAINER_SIZE = { width: 180, height: 56 };
+
+export const FIT_TO_CONTENT_PADDING = 40;
+
+export const EXPORT_PADDING = 20;
+
+export const GRAPHICAL_COMPARTMENT = {
+  headerHeight: 56,
+  gap: 12,
+  padding: 16,
+  lineHeight: 14,
+};
+
+export const SYSML_CSS_VARS = [
+  "--sysml-bg",
+  "--sysml-grid",
+  "--sysml-node-fill",
+  "--sysml-node-stroke",
+  "--sysml-link-stroke",
+  "--sysml-flow",
+  "--sysml-transition",
+  "--sysml-action",
+  "--sysml-action-accent",
+  "--sysml-lane-fill",
+  "--sysml-lane-stroke",
+  "--sysml-param-fill",
+  "--sysml-trigger-fill",
+  "--sysml-req-fill",
+  "--sysml-req-stroke",
+  "--sysml-package-fill",
+  "--sysml-package-stroke",
+  "--sysml-view-fill",
+  "--sysml-view-stroke",
+  "--sysml-constraint-fill",
+  "--sysml-constraint-stroke",
+  "--sysml-state-fill",
+  "--sysml-state-stroke",
+  "--sysml-connection-fill",
+  "--sysml-connection-stroke",
+  "--sysml-interface-fill",
+  "--sysml-interface-stroke",
+  "--sysml-port-in",
+  "--sysml-port-out",
+  "--sysml-port-inout",
+  "--sysml-grid-header",
+  "--sysml-grid-fill",
+  "--sysml-grid-stroke",
+  "--sysml-grid-group",
+  "--sysml-link-ownership",
+  "--sysml-link-typing",
+  "--sysml-link-specialization",
+  "--sysml-link-req",
+  "--sysml-link-verify",
+  "--sysml-link-derive",
+  "--sysml-link-allocate",
+  "--sysml-link-view",
+  "--sysml-sequence",
+  "--sysml-sequence-fill",
+  "--sysml-geometry-fill",
+  "--sysml-geometry-stroke",
+  "--sysml-geometry-link",
+  "--sysml-metaclass-stroke",
+  "--sysml-browser",
+  "--sysml-browser-icon",
+  "--sysml-panel",
+  "--sysml-panel-border",
+  "--sysml-panel-shadow",
+  "--sysml-text",
+  "--sysml-muted",
+];

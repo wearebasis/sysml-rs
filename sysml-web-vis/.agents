@@ -1,0 +1,1 @@
+Before implementing anything in JointJS, search the API reference in JoinJSReference.md for a dedicated namespace (routers/connectors/anchors/tools/highlighters/layout) and only implement if nothing exists.

@@ -17,6 +17,11 @@ NonOccurrenceUsageElement = {
     | BindingConnectorAsUsage
     | SuccessionAsUsage
     | ExtendedUsage
+    // KerML feature types (for standard library parsing)
+    | StepUsage
+    | ExpressionUsage
+    | BooleanExpressionUsage
+    | InvariantUsage
 }
 
 OccurrenceUsageElement = {
@@ -73,7 +78,16 @@ VariantReference = { OwnedReferenceSubsetting ~ FeatureSpecialization* ~ UsageBo
 UsagePrefix = { UnextendedUsagePrefix ~ UsageExtensionKeyword* }
 UnextendedUsagePrefix = { EndUsagePrefix | BasicUsagePrefix }
 BasicUsagePrefix = { RefPrefix ~ Reference? }
-RefPrefix = { FeatureDirectionKind? ~ BasicDefinitionPrefix? ~ Readonly? ~ Derived? }
+// KerML BasicFeaturePrefix: direction? derived? abstract? (composite|portion)? (var|const)?
+// Note: FeaturePortion (the 'portion' keyword) is distinct from Portion (which is PortionKind: timeslice|snapshot)
+RefPrefix = {
+    FeatureDirectionKind? ~
+    Derived? ~
+    BasicDefinitionPrefix? ~
+    (Composite | FeaturePortion)? ~
+    (Variable | Constant)? ~
+    Readonly?
+}
 Reference = { KW_REF }
 EndUsagePrefix = { End ~ OwnedCrossingFeatureMember? }
 UsageExtensionKeyword = { PrefixMetadataMember }
@@ -381,4 +395,28 @@ SuccessionAsUsage = {
 
 ExtendedUsage = {
     UnextendedUsagePrefix ~ UsageExtensionKeyword+ ~ UsageDeclaration? ~ UsageCompletion
+}
+
+// =============================================================================
+// KERML FEATURE USAGES (for standard library parsing)
+// =============================================================================
+
+// KerML Step: [modifiers] step [name] [: Type] [= value] { ... } | ;
+StepUsage = {
+    UsagePrefix ~ KW_STEP ~ UsageDeclaration? ~ ValuePart? ~ DefinitionBody
+}
+
+// KerML Expression: [modifiers] expr [name] [: Type] [= value] { ... } | ;
+ExpressionUsage = {
+    UsagePrefix ~ KW_EXPR ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
+}
+
+// KerML BooleanExpression: [modifiers] bool [name] [: Type] [= value] { ... } | ;
+BooleanExpressionUsage = {
+    UsagePrefix ~ KW_BOOL ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
+}
+
+// KerML Invariant: [modifiers] inv [true|false] [name] [: Type] [= value] { ... } | ;
+InvariantUsage = {
+    UsagePrefix ~ KW_INV ~ (KW_TRUE | KW_FALSE)? ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
 }

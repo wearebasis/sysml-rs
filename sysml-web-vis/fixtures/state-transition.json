@@ -1,0 +1,175 @@
+{
+  "version": "0.2",
+  "view": "StateTransitionView",
+  "viewMetadata": {
+    "title": "State Transition View",
+    "subtitle": "Vehicle Controller",
+    "subject": "Controller",
+    "compartmentMode": "mixed"
+  },
+  "nodes": [
+    {
+      "id": "state-initial",
+      "kind": "InitialState",
+      "position": { "x": 40, "y": 160 }
+    },
+    {
+      "id": "state-idle",
+      "kind": "StateUsage",
+      "name": "Idle",
+      "position": { "x": 140, "y": 140 }
+    },
+    {
+      "id": "state-active",
+      "kind": "StateUsage",
+      "name": "Active",
+      "position": { "x": 380, "y": 80 },
+      "size": { "width": 300, "height": 240 },
+      "compartments": [
+        {
+          "id": "actions",
+          "title": "entry / do / exit",
+          "kind": "text",
+          "lines": [
+            "entry / startMotor()",
+            "do / monitorTelemetry()",
+            "exit / stopMotor()"
+          ]
+        },
+        {
+          "id": "substates",
+          "title": "substates",
+          "kind": "graphical",
+          "nodeIds": [
+            "state-active-idle",
+            "state-active-running",
+            "state-active-history"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "state-active-idle",
+      "kind": "StateUsage",
+      "name": "Primed",
+      "parentId": "state-active",
+      "position": { "x": 400, "y": 140 },
+      "size": { "width": 140, "height": 64 }
+    },
+    {
+      "id": "state-active-running",
+      "kind": "StateUsage",
+      "name": "Running",
+      "parentId": "state-active",
+      "position": { "x": 540, "y": 140 },
+      "size": { "width": 140, "height": 64 }
+    },
+    {
+      "id": "state-active-history",
+      "kind": "HistoryState",
+      "name": "H",
+      "parentId": "state-active",
+      "position": { "x": 470, "y": 200 }
+    },
+    {
+      "id": "state-choice",
+      "kind": "ChoiceNode",
+      "position": { "x": 560, "y": 300 }
+    },
+    {
+      "id": "state-error",
+      "kind": "StateUsage",
+      "name": "Error",
+      "position": { "x": 360, "y": 360 }
+    },
+    {
+      "id": "state-recover",
+      "kind": "StateUsage",
+      "name": "Recover",
+      "position": { "x": 120, "y": 360 }
+    },
+    {
+      "id": "state-final",
+      "kind": "FinalState",
+      "position": { "x": 40, "y": 420 }
+    }
+  ],
+  "links": [
+    {
+      "id": "transition-0",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-initial" },
+      "target": { "nodeId": "state-idle" },
+      "transition": {
+        "effect": "init()"
+      }
+    },
+    {
+      "id": "transition-1",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-idle" },
+      "target": { "nodeId": "state-active" },
+      "transition": {
+        "trigger": "start",
+        "guard": "ready",
+        "effect": "spinUp()"
+      }
+    },
+    {
+      "id": "transition-2",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-active" },
+      "target": { "nodeId": "state-choice" },
+      "transition": {
+        "trigger": "fault?"
+      }
+    },
+    {
+      "id": "transition-3",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-choice" },
+      "target": { "nodeId": "state-error" },
+      "transition": {
+        "guard": "yes",
+        "effect": "raiseAlarm()"
+      }
+    },
+    {
+      "id": "transition-4",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-choice" },
+      "target": { "nodeId": "state-recover" },
+      "transition": {
+        "guard": "no"
+      }
+    },
+    {
+      "id": "transition-5",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-error" },
+      "target": { "nodeId": "state-recover" },
+      "transition": {
+        "trigger": "reset",
+        "effect": "clearFaults()"
+      }
+    },
+    {
+      "id": "transition-6",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-recover" },
+      "target": { "nodeId": "state-final" },
+      "transition": {
+        "trigger": "complete"
+      }
+    },
+    {
+      "id": "transition-7",
+      "kind": "TransitionUsage",
+      "source": { "nodeId": "state-error" },
+      "target": { "nodeId": "state-active-history" },
+      "transition": {
+        "trigger": "resume"
+      }
+    }
+  ]
+}

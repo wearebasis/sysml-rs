@@ -2,7 +2,7 @@
 //!
 //! This module generates human-readable coverage reports.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{CoverageSummary, FileParseResult};
 
@@ -63,12 +63,19 @@ pub fn generate_report(
     if !failed.is_empty() {
         report.push_str(&format!("Failed Files ({}):\n", failed.len()));
         for result in &failed {
-            report.push_str(&format!("  - {}", result.path));
+            // Extract just the filename for compact display
+            let filename = result
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&result.path);
+            report.push_str(&format!("  - {}", filename));
             if !result.errors.is_empty() {
-                // Show first error only
+                // Show first error, truncated to 200 chars for readability
+                // but prioritize showing the line:column location
                 let first_error = &result.errors[0];
-                let truncated = if first_error.len() > 60 {
-                    format!("{}...", &first_error[..60])
+                let truncated = if first_error.len() > 200 {
+                    format!("{}...", &first_error[..200])
                 } else {
                     first_error.clone()
                 };
@@ -93,6 +100,41 @@ pub fn generate_report(
         report.push('\n');
     }
 
+    // Error pattern grouping - helps identify common grammar gaps
+    let mut error_patterns: HashMap<String, Vec<&str>> = HashMap::new();
+    for result in results.iter().filter(|r| !r.success) {
+        for error in &result.errors {
+            // Extract the "expected X" pattern from the error
+            if let Some(pattern) = extract_expected_pattern(error) {
+                let filename = result.path.rsplit('/').next().unwrap_or(&result.path);
+                error_patterns.entry(pattern).or_default().push(filename);
+            }
+        }
+    }
+
+    if !error_patterns.is_empty() {
+        // Sort by frequency (most common first)
+        let mut patterns: Vec<_> = error_patterns.into_iter().collect();
+        patterns.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+        report.push_str("Error Patterns (grouped by grammar gap):\n");
+        for (pattern, files) in patterns.iter().take(10) {
+            report.push_str(&format!(
+                "  [{:2}] expected {}\n",
+                files.len(),
+                truncate_str(pattern, 60)
+            ));
+            // Show up to 3 affected files
+            for file in files.iter().take(3) {
+                report.push_str(&format!("       - {}\n", file));
+            }
+            if files.len() > 3 {
+                report.push_str(&format!("       ... and {} more\n", files.len() - 3));
+            }
+        }
+        report.push('\n');
+    }
+
     // Summary line
     if summary.unexpected_failures > 0 {
         report.push_str(&format!(
@@ -104,6 +146,33 @@ pub fn generate_report(
     }
 
     report
+}
+
+/// Extract the "expected X" pattern from a pest error message.
+fn extract_expected_pattern(error: &str) -> Option<String> {
+    // Look for "expected X" pattern in the error
+    if let Some(idx) = error.find("expected ") {
+        let rest = &error[idx + 9..];
+        // Find the end of the expected list (at newline or " --> ")
+        let end = rest
+            .find("\n")
+            .or_else(|| rest.find(" --> "))
+            .unwrap_or(rest.len());
+        let pattern = rest[..end].trim();
+        if !pattern.is_empty() {
+            return Some(pattern.to_string());
+        }
+    }
+    None
+}
+
+/// Truncate a string to max_len, adding "..." if truncated.
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() > max_len {
+        format!("{}...", &s[..max_len])
+    } else {
+        s.to_string()
+    }
 }
 
 /// Format a list of failures for assertion messages.

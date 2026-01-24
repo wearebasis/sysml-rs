@@ -28,6 +28,7 @@
 
 use pest::Parser as PestParserTrait;
 use pest_derive::Parser;
+use rayon::prelude::*;
 use sysml_core::ModelGraph;
 use sysml_span::{Diagnostic, Span};
 use sysml_text::{ParseResult, Parser, SysmlFile};
@@ -165,13 +166,29 @@ impl PestParser {
 
 impl Parser for PestParser {
     fn parse(&self, inputs: &[SysmlFile]) -> ParseResult {
+        // Threshold for parallel parsing - overhead not worth it for small batches
+        const PARALLEL_THRESHOLD: usize = 2;
+
+        let results: Vec<(ModelGraph, Vec<Diagnostic>)> = if inputs.len() >= PARALLEL_THRESHOLD {
+            // Parse files in parallel using rayon
+            inputs
+                .par_iter()
+                .map(|file| self.parse_file(file))
+                .collect()
+        } else {
+            // Sequential parsing for single files (avoids rayon overhead)
+            inputs
+                .iter()
+                .map(|file| self.parse_file(file))
+                .collect()
+        };
+
+        // Sequential merge phase (unavoidable - mutates single graph)
         let mut combined_graph = ModelGraph::new();
         let mut all_diagnostics = Vec::new();
 
-        for file in inputs {
-            let (graph, diagnostics) = self.parse_file(file);
-
-            // Merge graphs
+        for (graph, diagnostics) in results {
+            // Merge graphs - copy elements and relationships
             for (_, element) in graph.elements {
                 combined_graph.add_element(element);
             }
@@ -181,6 +198,10 @@ impl Parser for PestParser {
 
             all_diagnostics.extend(diagnostics);
         }
+
+        // Rebuild indexes after merging to ensure namespace_to_memberships
+        // and element_to_owning_membership indexes are populated
+        combined_graph.rebuild_indexes();
 
         ParseResult::new(combined_graph, all_diagnostics)
     }
@@ -374,10 +395,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // Note: Documentation parsing with /* */ comment body has precedence issues
-    // with the implicit COMMENT rule. This is a known limitation to be fixed.
+    // Documentation parsing with /* */ comment body.
+    // Fixed in 2c.1: ML_COMMENT removed from implicit COMMENT rule.
     #[test]
-    #[ignore = "Documentation comment precedence issue - to be fixed"]
     fn parse_documentation() {
         let parser = PestParser::new();
         let files = vec![SysmlFile::new(

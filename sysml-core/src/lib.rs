@@ -20,7 +20,9 @@
 //! This crate also provides typed property accessors generated from OSLC shapes.
 //! Use `element.as_part_usage()` to get a typed accessor for PartUsage properties.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -39,6 +41,9 @@ mod namespace;
 mod structural_validation;
 mod factory;
 
+// Name resolution module (Phase 2d)
+pub mod resolution;
+
 pub use membership::{MembershipBuilder, MembershipView, OwningMembershipView};
 pub use structural_validation::StructuralError;
 pub use factory::ElementFactory;
@@ -51,6 +56,14 @@ include!(concat!(env!("OUT_DIR"), "/enums.generated.rs"));
 
 // Include the generated property accessors
 include!(concat!(env!("OUT_DIR"), "/properties.generated.rs"));
+
+/// Cross-reference registry generated from Xtext grammar.
+///
+/// This module contains metadata about all cross-reference properties
+/// including their target types and scoping strategies.
+pub mod crossrefs {
+    include!(concat!(env!("OUT_DIR"), "/crossrefs.generated.rs"));
+}
 
 /// The kind of a relationship between elements.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -281,19 +294,34 @@ pub struct ModelGraph {
 
     // Indexes (built lazily, not serialized)
     #[cfg_attr(feature = "serde", serde(skip))]
-    owner_to_children: HashMap<ElementId, HashSet<ElementId>>,
+    owner_to_children: FxHashMap<ElementId, FxHashSet<ElementId>>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    source_to_rels: HashMap<ElementId, HashSet<ElementId>>,
+    source_to_rels: FxHashMap<ElementId, FxHashSet<ElementId>>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    target_to_rels: HashMap<ElementId, HashSet<ElementId>>,
+    target_to_rels: FxHashMap<ElementId, FxHashSet<ElementId>>,
 
     // NEW: Membership-based ownership indexes
     /// Maps namespace ID to its membership element IDs.
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub(crate) namespace_to_memberships: HashMap<ElementId, HashSet<ElementId>>,
+    pub(crate) namespace_to_memberships: FxHashMap<ElementId, FxHashSet<ElementId>>,
     /// Maps element ID to its owning membership element ID.
     #[cfg_attr(feature = "serde", serde(skip))]
-    pub(crate) element_to_owning_membership: HashMap<ElementId, ElementId>,
+    pub(crate) element_to_owning_membership: FxHashMap<ElementId, ElementId>,
+
+    // Phase 1 Performance Optimization: Reverse indexes for O(1) relationship lookups
+    /// Maps typed feature ID to FeatureTyping element IDs that type it.
+    /// Used by find_feature_type() and find_feature_types() for O(1) lookup.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) typed_feature_to_typings: FxHashMap<ElementId, Vec<ElementId>>,
+    /// Maps specific type ID to Specialization element IDs where it is the specific type.
+    /// Used by find_general_types() for O(1) lookup.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub(crate) specific_to_specializations: FxHashMap<ElementId, Vec<ElementId>>,
+
+    /// Set of root package IDs that are standard library packages.
+    /// Library packages are available globally during name resolution.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "FxHashSet::is_empty"))]
+    library_packages: FxHashSet<ElementId>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     indexes_dirty: bool,
@@ -305,11 +333,14 @@ impl ModelGraph {
         ModelGraph {
             elements: BTreeMap::new(),
             relationships: BTreeMap::new(),
-            owner_to_children: HashMap::new(),
-            source_to_rels: HashMap::new(),
-            target_to_rels: HashMap::new(),
-            namespace_to_memberships: HashMap::new(),
-            element_to_owning_membership: HashMap::new(),
+            owner_to_children: FxHashMap::default(),
+            source_to_rels: FxHashMap::default(),
+            target_to_rels: FxHashMap::default(),
+            namespace_to_memberships: FxHashMap::default(),
+            element_to_owning_membership: FxHashMap::default(),
+            typed_feature_to_typings: FxHashMap::default(),
+            specific_to_specializations: FxHashMap::default(),
+            library_packages: FxHashSet::default(),
             indexes_dirty: false,
         }
     }
@@ -324,6 +355,34 @@ impl ModelGraph {
                 .entry(owner.clone())
                 .or_default()
                 .insert(id.clone());
+        }
+
+        // Update reverse indexes for FeatureTyping elements
+        if element.kind == ElementKind::FeatureTyping
+            || element.kind.is_subtype_of(ElementKind::FeatureTyping)
+        {
+            if let Some(typed_feature) = element.props.get("typedFeature") {
+                if let Some(tf_id) = typed_feature.as_ref() {
+                    self.typed_feature_to_typings
+                        .entry(tf_id.clone())
+                        .or_default()
+                        .push(id.clone());
+                }
+            }
+        }
+
+        // Update reverse indexes for Specialization elements
+        if element.kind == ElementKind::Specialization
+            || element.kind.is_subtype_of(ElementKind::Specialization)
+        {
+            if let Some(specific) = element.props.get("specific") {
+                if let Some(specific_id) = specific.as_ref() {
+                    self.specific_to_specializations
+                        .entry(specific_id.clone())
+                        .or_default()
+                        .push(id.clone());
+                }
+            }
         }
 
         self.elements.insert(id.clone(), element);
@@ -429,6 +488,8 @@ impl ModelGraph {
         self.target_to_rels.clear();
         self.namespace_to_memberships.clear();
         self.element_to_owning_membership.clear();
+        self.typed_feature_to_typings.clear();
+        self.specific_to_specializations.clear();
 
         for (id, element) in &self.elements {
             if let Some(owner) = &element.owner {
@@ -442,6 +503,34 @@ impl ModelGraph {
             if let Some(membership_id) = &element.owning_membership {
                 self.element_to_owning_membership
                     .insert(id.clone(), membership_id.clone());
+            }
+
+            // Rebuild typed_feature_to_typings index from FeatureTyping elements
+            if element.kind == ElementKind::FeatureTyping
+                || element.kind.is_subtype_of(ElementKind::FeatureTyping)
+            {
+                if let Some(typed_feature) = element.props.get("typedFeature") {
+                    if let Some(tf_id) = typed_feature.as_ref() {
+                        self.typed_feature_to_typings
+                            .entry(tf_id.clone())
+                            .or_default()
+                            .push(id.clone());
+                    }
+                }
+            }
+
+            // Rebuild specific_to_specializations index from Specialization elements
+            if element.kind == ElementKind::Specialization
+                || element.kind.is_subtype_of(ElementKind::Specialization)
+            {
+                if let Some(specific) = element.props.get("specific") {
+                    if let Some(specific_id) = specific.as_ref() {
+                        self.specific_to_specializations
+                            .entry(specific_id.clone())
+                            .or_default()
+                            .push(id.clone());
+                    }
+                }
             }
         }
 
@@ -486,7 +575,133 @@ impl ModelGraph {
         self.target_to_rels.clear();
         self.namespace_to_memberships.clear();
         self.element_to_owning_membership.clear();
+        self.typed_feature_to_typings.clear();
+        self.specific_to_specializations.clear();
+        self.library_packages.clear();
         self.indexes_dirty = false;
+    }
+
+    // === Standard Library Support (Phase 2d.5) ===
+
+    /// Mark a root package as a standard library package.
+    ///
+    /// Library packages are available globally during name resolution,
+    /// making their public members accessible from any namespace.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_id` - The ID of a root Package element
+    ///
+    /// # Returns
+    ///
+    /// `true` if the package was successfully marked as a library package,
+    /// `false` if the element doesn't exist or is not a root package.
+    pub fn register_library_package(&mut self, package_id: ElementId) -> bool {
+        // Verify the element exists and is a root package
+        if let Some(element) = self.elements.get(&package_id) {
+            let is_package = element.kind == ElementKind::Package
+                || element.kind == ElementKind::LibraryPackage
+                || element.kind.is_subtype_of(ElementKind::Package);
+            let is_root = element.owner.is_none();
+
+            if is_package && is_root {
+                self.library_packages.insert(package_id);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Remove a package from the library packages set.
+    pub fn unregister_library_package(&mut self, package_id: &ElementId) -> bool {
+        self.library_packages.remove(package_id)
+    }
+
+    /// Check if a package is registered as a library package.
+    pub fn is_library_package(&self, package_id: &ElementId) -> bool {
+        self.library_packages.contains(package_id)
+    }
+
+    /// Get all library package IDs.
+    pub fn library_packages(&self) -> &FxHashSet<ElementId> {
+        &self.library_packages
+    }
+
+    /// Get all library packages as elements.
+    pub fn library_package_elements(&self) -> impl Iterator<Item = &Element> {
+        self.library_packages
+            .iter()
+            .filter_map(move |id| self.elements.get(id))
+    }
+
+    /// Add an element as a library package.
+    ///
+    /// This is a convenience method that combines `add_element` and
+    /// `register_library_package`.
+    ///
+    /// # Returns
+    ///
+    /// The ElementId of the added package.
+    pub fn add_library_package(&mut self, element: Element) -> ElementId {
+        let id = self.add_element(element);
+        self.library_packages.insert(id.clone());
+        id
+    }
+
+    /// Merge another graph's elements into this graph.
+    ///
+    /// This is useful for loading standard library graphs into a user graph.
+    /// If `as_library` is true, all root packages from the source graph
+    /// are registered as library packages.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The graph to merge from
+    /// * `as_library` - Whether to mark merged root packages as library packages
+    ///
+    /// # Returns
+    ///
+    /// The number of elements merged.
+    pub fn merge(&mut self, other: ModelGraph, as_library: bool) -> usize {
+        let count = other.elements.len();
+
+        // Collect root package IDs before merging
+        let root_package_ids: Vec<ElementId> = if as_library {
+            other
+                .elements
+                .values()
+                .filter(|e| {
+                    e.owner.is_none()
+                        && (e.kind == ElementKind::Package
+                            || e.kind == ElementKind::LibraryPackage
+                            || e.kind.is_subtype_of(ElementKind::Package))
+                })
+                .map(|e| e.id.clone())
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Merge elements
+        for (id, element) in other.elements {
+            self.elements.insert(id.clone(), element);
+            // Note: We don't update owner_to_children here as they're for the original graph
+        }
+
+        // Merge relationships
+        for (id, rel) in other.relationships {
+            self.relationships.insert(id, rel);
+        }
+
+        // Register library packages
+        for id in root_package_ids {
+            self.library_packages.insert(id);
+        }
+
+        // Mark indexes as needing rebuild
+        self.indexes_dirty = true;
+
+        count
     }
 }
 

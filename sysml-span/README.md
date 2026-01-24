@@ -1,17 +1,96 @@
 # sysml-span
 
-Source locations, diagnostics, and severity levels for SysML v2.
+## What This Does (One Sentence)
 
-## Purpose
+Tracks where things are in your source files and reports problems to users with helpful error messages.
 
-This crate provides types for tracking source code locations and reporting diagnostics:
+## The Problem It Solves
 
-- **Span**: A range in a source file (byte offsets, optional line/column)
-- **Severity**: Error, Warning, or Info
-- **Diagnostic**: A message with severity, optional code, span, and notes
-- **Diagnostics**: A collection of diagnostics with helper methods
+When something goes wrong while reading a SysML file, users need to know **exactly where** the problem is. Without this crate, error messages would say things like "invalid syntax" with no location. With it, they say:
 
-## Public API
+```
+error[E0001]: undefined element 'Vehicle'
+  --> model.sysml:42:12
+  = note: did you mean 'Vehicles'?
+```
+
+Think of it like **GPS for error messages** — it pinpoints the exact file, line, and column where problems occur.
+
+## How It Works
+
+```
+Your SysML file (model.sysml)
+─────────────────────────────────
+line 41: part engine : Engine;
+line 42: part car : Vehicle;      ← Problem here!
+                     ^^^^^^^^
+                     cols 12-19
+
+                        │
+                        ▼
+               ┌─────────────────┐
+               │      Span       │
+               │ ─────────────── │
+               │ file: model.sysml
+               │ start: byte 847 │
+               │ end: byte 854   │
+               │ line: 42        │
+               │ column: 12      │
+               └────────┬────────┘
+                        │
+                        ▼
+    ┌────────────────────────────────────────┐
+    │ Diagnostic                              │
+    │ ──────────────────────────────────────  │
+    │ severity: Error                         │
+    │ message: "undefined element 'Vehicle'"  │
+    │ code: E0001                             │
+    │ span: model.sysml:42:12-19              │
+    │ note: "did you mean 'Vehicles'?"        │
+    └────────────────────────────────────────┘
+                        │
+                        ▼
+            Shown to the user in their
+            terminal or IDE
+```
+
+## How It Fits Into the System
+
+This crate sits at the very bottom of the stack — almost every other crate uses it:
+
+```
+              ┌─────────────┐
+              │  Your Tool  │  (API, LSP, CLI)
+              └──────┬──────┘
+                     │
+         ┌───────────┴───────────┐
+         ▼                       ▼
+    ┌─────────┐            ┌─────────┐
+    │ Parser  │            │  Query  │
+    └────┬────┘            └────┬────┘
+         │                      │
+         │  Both create         │
+         │  Diagnostics         │
+         └──────────┬───────────┘
+                    ▼
+              ┌───────────┐
+              │ sysml-span│  ← You are here
+              └───────────┘
+```
+
+## Key Concepts
+
+| Concept | What It Is | Analogy |
+|---------|-----------|---------|
+| **Span** | A range in a source file (start to end position) | Highlighting text with a marker |
+| **Severity** | How serious a problem is (Error, Warning, Info) | Traffic lights (red, yellow, green) |
+| **Diagnostic** | A complete problem report with message, location, and hints | A detailed doctor's report |
+| **Diagnostics** | A collection of multiple diagnostics | A folder of reports |
+
+## For Developers
+
+<details>
+<summary>API Reference (click to expand)</summary>
 
 ### Span
 
@@ -22,11 +101,8 @@ let span = Span::new("file.sysml", 10, 20);
 // Create with line/column info
 let span = Span::with_location("file.sysml", 10, 20, 5, 3);
 
-// Point span
+// Point span (single position)
 let span = Span::point("file.sysml", 15);
-
-// Synthetic (no real location)
-let span = Span::synthetic();
 
 // Operations
 span.len();           // byte length
@@ -34,31 +110,13 @@ span.contains(15);    // check if offset in range
 span.merge(&other);   // combine two spans
 ```
 
-### Severity
-
-```rust
-pub enum Severity {
-    Info,
-    Warning,
-    Error,
-}
-
-severity.is_error();
-severity.is_warning_or_error();
-```
-
 ### Diagnostic
 
 ```rust
-// Create diagnostics
 let diag = Diagnostic::error("parse error")
     .with_code("E001")
     .with_span(span)
     .with_note("hint: check syntax");
-
-// Convenience constructors
-Diagnostic::warning("deprecated feature");
-Diagnostic::info("suggestion");
 ```
 
 ### Diagnostics Collection
@@ -67,34 +125,11 @@ Diagnostic::info("suggestion");
 let mut diags = Diagnostics::new();
 diags.error("error 1");
 diags.warning("warning 1");
-
 diags.has_errors();   // true
-diags.error_count();  // 1
-diags.len();          // 2
 ```
 
-## Features
+### Features
 
-- `serde`: Enable serde serialization support
+- `serde`: Enable serialization support
 
-## Dependencies
-
-- `serde` (optional): Serialization support
-
-## Example
-
-```rust
-use sysml_span::{Span, Diagnostic, Severity, Diagnostics};
-
-let span = Span::with_location("model.sysml", 100, 110, 10, 5);
-
-let diag = Diagnostic::error("undefined element 'foo'")
-    .with_code("E0001")
-    .with_span(span)
-    .with_note("did you mean 'bar'?");
-
-println!("{}", diag);
-// error[E0001]: undefined element 'foo'
-//   --> model.sysml:10:5
-//   = note: did you mean 'bar'?
-```
+</details>

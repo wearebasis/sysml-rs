@@ -2,9 +2,96 @@
 
 A Unix-philosophy SysML v2 ecosystem implemented in Rust.
 
+## What is SysML?
+
+**SysML v2** (Systems Modeling Language) is a standard language for describing complex systems — think vehicles, spacecraft, factories, or software architectures. Engineers write SysML models to:
+
+- Define **parts** and how they connect
+- Capture **requirements** and trace them to designs
+- Describe **behaviors** like state machines and processes
+- Share designs between teams and tools
+
+This project provides Rust libraries and tools to **read, store, query, execute, and visualize** SysML v2 models.
+
+## How the Pieces Fit Together
+
+```
+                          Your SysML Files
+                     ┌─────────────────────────┐
+                     │  package Vehicle {      │
+                     │    part engine;         │
+                     │    requirement speed;   │
+                     │  }                      │
+                     └───────────┬─────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        PARSE (read the text)                     │
+│                                                                  │
+│  sysml-text-pest reads the file and creates a structured model   │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     STORE (hold the model)                       │
+│                                                                  │
+│  sysml-core keeps all elements and relationships in a ModelGraph │
+└─────────────────────────────────┬───────────────────────────────┘
+                                  │
+            ┌─────────────────────┼─────────────────────┐
+            │                     │                     │
+            ▼                     ▼                     ▼
+    ┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+    │    QUERY      │     │    EXECUTE    │     │   VISUALIZE   │
+    │               │     │               │     │               │
+    │  Find parts,  │     │ Run state     │     │ Export to     │
+    │  trace reqs,  │     │ machines,     │     │ diagrams,     │
+    │  filter by    │     │ evaluate      │     │ DOT, JSON     │
+    │  properties   │     │ constraints   │     │               │
+    │               │     │               │     │               │
+    │  sysml-query  │     │  sysml-run-*  │     │  sysml-vis    │
+    └───────────────┘     └───────────────┘     └───────────────┘
+            │                     │                     │
+            └─────────────────────┼─────────────────────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │         SERVE           │
+                    │                         │
+                    │  REST API for external  │
+                    │  tools and integrations │
+                    │                         │
+                    │       sysml-api         │
+                    └─────────────────────────┘
+```
+
+## Quick Start
+
+### For Users (Conceptual Overview)
+
+1. **Write your model** in `.sysml` files using the SysML v2 textual syntax
+2. **Parse it** using `sysml-text-pest` to get a structured `ModelGraph`
+3. **Query it** using `sysml-query` to find elements, trace requirements, etc.
+4. **Execute it** using `sysml-run-statemachine` to simulate behaviors
+5. **Visualize it** using `sysml-vis` to export diagrams
+6. **Serve it** using `sysml-api` to make it available over HTTP
+
+### For Developers
+
+```bash
+# Build all crates
+cargo build
+
+# Run all tests
+cargo test
+
+# Build with serialization support
+cargo build --features sysml-core/serde
+```
+
 ## Architecture
 
-This workspace follows a layered architecture with clean crate boundaries and minimal dependencies. Each crate has a single responsibility and can be used independently.
+This workspace follows a layered architecture with clean crate boundaries. Each crate has a single responsibility and can be used independently.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -41,75 +128,66 @@ This workspace follows a layered architecture with clean crate boundaries and mi
 └───────────────┘   └─────────────────────┘   └─────────────────────┘
 ```
 
-## Crate Map
+## Crate Overview
 
-### Foundations
-| Crate | Purpose |
-|-------|---------|
-| `sysml-id` | Element identifiers, qualified names, project/commit IDs |
-| `sysml-span` | Source locations, diagnostics, severity levels |
-| `sysml-meta` | Metadata types: applicability, clause references, values |
+### Foundations (Bottom Layer)
 
-### Semantic Core
-| Crate | Purpose |
-|-------|---------|
-| `sysml-core` | Core model types: Element, Relationship, ModelGraph |
-| `sysml-query` | Query functions over ModelGraph |
+These crates have minimal dependencies and provide basic building blocks.
+
+| Crate | What It Does |
+|-------|-------------|
+| `sysml-id` | Unique identifiers for elements, projects, and commits |
+| `sysml-span` | Source locations and error reporting (see [README](sysml-span/README.md)) |
+| `sysml-meta` | Metadata types like applicability and clause references |
+
+### Semantic Core (Middle Layer)
+
+These crates define how SysML models are represented and manipulated.
+
+| Crate | What It Does |
+|-------|-------------|
+| `sysml-core` | The model database — elements, relationships, and the ModelGraph (see [README](sysml-core/README.md)) |
+| `sysml-query` | Functions to search and filter the ModelGraph |
 | `sysml-canon` | Canonical JSON serialization with stable ordering |
 
 ### Text Frontend
-| Crate | Purpose |
-|-------|---------|
-| `sysml-text` | Parser trait and result types |
-| `sysml-text-pest` | Native Rust parser (pest, spec-derived grammar) |
-| `sysml-text-pilot-sidecar` | Adapter for Pilot parser (JVM/HTTP) |
-| `sysml-text-monticore-sidecar` | Adapter for MontiCore parser (JVM/HTTP) |
-| `sysml-text-syside-sidecar` | Adapter for SySide parser (Node.js) |
+
+These crates handle reading SysML text files.
+
+| Crate | What It Does |
+|-------|-------------|
+| `sysml-text` | Parser interface that all parsers implement (see [README](sysml-text/README.md)) |
+| `sysml-text-pest` | Native Rust parser using pest grammar (see [README](sysml-text-pest/README.md)) |
+| `sysml-text-*-sidecar` | Adapters for external parsers (Pilot, MontiCore, SySide) |
 
 ### IDE Support
-| Crate | Purpose |
-|-------|---------|
-| `sysml-ts` | Tree-sitter based CST parsing (fast, IDE-focused) |
-| `sysml-lsp` | LSP protocol types and conversions |
-| `sysml-lsp-server` | Full LSP server implementation |
 
-### Visualization
-| Crate | Purpose |
-|-------|---------|
+These crates enable editor integration.
+
+| Crate | What It Does |
+|-------|-------------|
+| `sysml-ts` | Tree-sitter CST parsing for fast IDE feedback |
+| `sysml-lsp` | LSP protocol types |
+| `sysml-lsp-server` | Full Language Server Protocol implementation |
+
+### Higher Layers
+
+| Crate | What It Does |
+|-------|-------------|
 | `sysml-vis` | Export to DOT, PlantUML, Cytoscape JSON |
-
-### Execution
-| Crate | Purpose |
-|-------|---------|
-| `sysml-run` | Runner trait and IR base types |
+| `sysml-run` | Runner trait for executables |
 | `sysml-run-statemachine` | State machine compilation and execution |
 | `sysml-run-constraints` | Constraint evaluation |
-
-### Storage & API
-| Crate | Purpose |
-|-------|---------|
 | `sysml-store` | Storage trait for model snapshots |
-| `sysml-store-postgres` | PostgreSQL implementation |
+| `sysml-store-postgres` | PostgreSQL backend |
 | `sysml-api` | REST API server |
 
-### Build & Testing
-| Crate | Purpose |
-|-------|---------|
+### Testing
+
+| Crate | What It Does |
+|-------|-------------|
 | `codegen` | Build-time code generation from spec files |
-| `sysml-spec-tests` | Parser coverage and corpus validation |
-
-## Getting Started
-
-```bash
-# Build all crates
-cargo build
-
-# Run all tests
-cargo test
-
-# Build with specific features
-cargo build --features sysml-core/serde
-```
+| `sysml-spec-tests` | Parser validation against official corpus (see [README](sysml-spec-tests/README.md)) |
 
 ## Extending
 

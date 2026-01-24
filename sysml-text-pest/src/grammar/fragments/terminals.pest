@@ -2,8 +2,21 @@
 // TERMINALS
 // =============================================================================
 
-// Identifiers
-ID = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+// Reserved literals that cannot be used as identifiers
+//
+// SysML uses CONTEXTUAL keywords (like xtext), not RESERVED keywords (like C/Java).
+// The xtext grammar defines: ID = ('a'..'z'|'A'..'Z'|'_')('a'..'z'|'A'..'Z'|'_'|'0'..'9')*
+// with NO keyword exclusion - keywords are handled by grammar context via PEG ordered choice.
+//
+// Only true literals that can never be identifiers are blocked here.
+// All other "keywords" (action, part, state, etc.) work as identifiers in appropriate contexts.
+RESERVED = @{
+    ("true" | "false" | "null") ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+// Identifiers - only block true literals
+// Keywords are contextual and handled by grammar rules using KW_* with PEG ordered choice
+ID = @{ !RESERVED ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Unrestricted name: 'name with spaces'
 UNRESTRICTED_NAME = @{ "'" ~ (ESCAPE_SEQUENCE | (!("'" | "\\") ~ ANY))* ~ "'" }

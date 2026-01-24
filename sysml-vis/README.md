@@ -10,6 +10,8 @@ This crate provides exporters for various visualization formats:
 - **PlantUML**: For diagrams rendered with PlantUML
 - **Cytoscape JSON**: For interactive web-based visualization
 
+For the detailed plan and milestones, see `sysml-vis/ROADMAP.md`.
+
 ## Planned Views (Spec-Based)
 
 The SysML v2 standard library defines view types in:
@@ -58,9 +60,19 @@ This maps common textual constructs to the standard views they appear in:
 ### DOT (Graphviz)
 
 ```rust
-use sysml_vis::to_dot;
+use sysml_vis::{
+    to_dot,
+    to_dot_browser_view,
+    to_dot_general_view,
+    to_dot_interconnection_view,
+    to_dot_requirements_view,
+};
 
-let dot = to_dot(&graph);
+let dot = to_dot(&graph);                // alias for general view
+let general = to_dot_general_view(&graph);
+let browser = to_dot_browser_view(&graph);
+let requirements = to_dot_requirements_view(&graph);
+let interconnection = to_dot_interconnection_view(&graph);
 // digraph sysml {
 //   "id1" [label="{Package | VehicleModel}"];
 //   "id2" [label="{PartDefinition | Engine}"];
@@ -68,12 +80,22 @@ let dot = to_dot(&graph);
 // }
 ```
 
+### Graphviz Helpers
+
+```rust
+use sysml_vis::{render_dot_to_svg, render_dot_to_png};
+
+let svg = render_dot_to_svg(&dot)?;
+render_dot_to_png(&dot, "model.png")?;
+```
+
 ### PlantUML
 
 ```rust
-use sysml_vis::to_plantuml;
+use sysml_vis::{to_plantuml, to_plantuml_state_view};
 
 let puml = to_plantuml(&graph);
+let states = to_plantuml_state_view(&graph);
 // @startuml
 // package "VehicleModel" {
 //   class "Engine" as id2
@@ -157,4 +179,15 @@ let json = to_cytoscape_json(&graph);
 std::fs::write("model.dot", &dot).unwrap();
 std::fs::write("model.puml", &plantuml).unwrap();
 std::fs::write("model.json", &json).unwrap();
+```
+
+## Examples to Run
+
+```bash
+cargo run -p sysml-vis --example browser_view
+cargo run -p sysml-vis --example general_view
+cargo run -p sysml-vis --example render_dot_svg
+cargo run -p sysml-vis --example requirements_view
+cargo run -p sysml-vis --example state_view
+cargo run -p sysml-vis --example interconnection_view
 ```

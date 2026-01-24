@@ -1,0 +1,9 @@
+{
+  "name": "sysml-rs-workspace",
+  "private": true,
+  "scripts": {
+    "test": "npm --prefix sysml-web-vis run test",
+    "test:update": "npm --prefix sysml-web-vis run test:update",
+    "test:png": "npm --prefix sysml-web-vis run test:png"
+  }
+}

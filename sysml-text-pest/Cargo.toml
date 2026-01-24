@@ -14,9 +14,15 @@ sysml-id = { workspace = true }
 pest = "2.7"
 pest_derive = "2.7"
 thiserror = { workspace = true }
+rayon = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "parser_benchmarks"
+harness = false
 
 [build-dependencies]
 sysml-codegen = { path = "../codegen" }

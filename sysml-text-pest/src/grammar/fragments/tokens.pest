@@ -30,6 +30,13 @@ ImportAll = { KW_ALL }
 Variation = { KW_VARIATION }
 Individual = { KW_INDIVIDUAL }
 
+// KerML feature modifiers (for standard library parsing)
+// These appear in BasicFeaturePrefix: composite | portion, var | const
+Composite = { KW_COMPOSITE }
+FeaturePortion = { KW_PORTION }
+Variable = { KW_VAR }
+Constant = { KW_CONST }
+
 MultiplicityProperties = {
     (KW_ORDERED ~ KW_NONUNIQUE?)
     | (KW_NONUNIQUE ~ KW_ORDERED?)

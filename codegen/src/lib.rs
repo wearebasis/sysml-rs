@@ -41,12 +41,15 @@
 //! - Include documentation comments from the specification
 
 pub mod accessor_generator;
+pub mod crossref_generator;
+pub mod crossref_validation;
 pub mod enum_generator;
 pub mod enum_value_generator;
 pub mod hierarchy_generator;
 pub mod inheritance;
 pub mod json_schema_parser;
 pub mod pest_generator;
+pub mod pest_validator;
 pub mod relationship_generator;
 pub mod shapes_parser;
 pub mod spec_validation;
@@ -54,6 +57,7 @@ pub mod ttl_parser;
 pub mod validation_generator;
 pub mod xmi_class_parser;
 pub mod xmi_relationship_parser;
+pub mod xtext_crossref_parser;
 pub mod xtext_parser;
 
 pub use enum_generator::generate_enum;
@@ -81,6 +85,16 @@ pub use xmi_relationship_parser::{
     parse_relationship_constraints, validate_relationship_coverage, CoverageReport, XmiParseError,
     XmiRelationshipConstraint,
 };
+pub use crossref_generator::{generate_crossref_registry, generate_summary};
+pub use crossref_validation::{
+    infer_scope_strategy, map_to_strategies, validate_crossref_coverage,
+    validate_crossref_coverage_detailed, CrossRefCoverageReport, DetailedCoverageReport,
+    ScopeStrategy, INTENTIONALLY_SKIPPED,
+};
+pub use xtext_crossref_parser::{
+    categorize_by_rule, categorize_by_target, get_cross_ref_properties,
+    parse_xtext_cross_references, CrossReference,
+};
 pub use xtext_parser::{
     extract_all_keyword_strings, parse_xtext_enums, parse_xtext_keywords, parse_xtext_operators,
     parse_xtext_rules, KeywordInfo, OperatorInfo, XtextEnumInfo, XtextRule,
@@ -88,6 +102,10 @@ pub use xtext_parser::{
 pub use pest_generator::{
     extract_all_enums, extract_all_keywords, extract_all_operators, generate_pest_enums,
     generate_pest_keywords, generate_pest_keywords_from_strings, generate_pest_operators,
+};
+pub use pest_validator::{
+    classify_keyword, get_keyword_classification_summary, validate_keyword_coverage, KeywordType,
+    ValidationResult,
 };
 
 #[cfg(test)]

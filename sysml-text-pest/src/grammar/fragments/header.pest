@@ -24,4 +24,8 @@ SL_NOTE = _{ "//*" ~ (!NEWLINE ~ ANY)* }
 // Multi-line note: //* ... */ (hidden)
 ML_NOTE = _{ "//*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
-COMMENT = _{ ML_COMMENT | SL_COMMENT }
+// Note: ML_COMMENT is intentionally NOT in the implicit COMMENT rule.
+// Multi-line comments /* ... */ should only be consumed by explicit rules:
+// Comment, Documentation, TextualRepresentation (via REGULAR_COMMENT_BODY).
+// This prevents documentation comments from being silently discarded.
+COMMENT = _{ SL_COMMENT }

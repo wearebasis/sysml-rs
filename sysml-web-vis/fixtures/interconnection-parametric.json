@@ -1,0 +1,98 @@
+{
+  "version": "0.2",
+  "view": "InterconnectionView",
+  "viewMetadata": {
+    "title": "Parametric Diagram",
+    "subtitle": "Thermal Balance",
+    "subject": "VehicleSystem",
+    "compartmentMode": "textual"
+  },
+  "nodes": [
+    {
+      "id": "constraint-thermal",
+      "kind": "ConstraintDefinition",
+      "name": "ThermalBalance",
+      "stereotype": "<<constraint>>",
+      "position": { "x": 360, "y": 120 }
+    },
+    {
+      "id": "constraint-mass",
+      "kind": "ConstraintDefinition",
+      "name": "MassBudget",
+      "stereotype": "<<constraint>>",
+      "position": { "x": 360, "y": 300 }
+    },
+    {
+      "id": "param-temp",
+      "kind": "Parameter",
+      "name": "temp",
+      "stereotype": "<<inout>>",
+      "position": { "x": 80, "y": 120 }
+    },
+    {
+      "id": "param-max",
+      "kind": "Parameter",
+      "name": "tempMax",
+      "stereotype": "<<in>>",
+      "position": { "x": 80, "y": 200 }
+    },
+    {
+      "id": "param-ambient",
+      "kind": "Parameter",
+      "name": "ambient",
+      "stereotype": "<<in>>",
+      "position": { "x": 80, "y": 280 }
+    },
+    {
+      "id": "param-mass",
+      "kind": "Parameter",
+      "name": "mass",
+      "stereotype": "<<inout>>",
+      "position": { "x": 80, "y": 360 }
+    },
+    {
+      "id": "param-limit",
+      "kind": "Parameter",
+      "name": "massLimit",
+      "stereotype": "<<in>>",
+      "position": { "x": 80, "y": 440 }
+    }
+  ],
+  "links": [
+    {
+      "id": "binding-temp",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-temp" },
+      "target": { "nodeId": "constraint-thermal" }
+    },
+    {
+      "id": "binding-max",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-max" },
+      "target": { "nodeId": "constraint-thermal" }
+    },
+    {
+      "id": "binding-ambient",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-ambient" },
+      "target": { "nodeId": "constraint-thermal" }
+    },
+    {
+      "id": "binding-mass",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-mass" },
+      "target": { "nodeId": "constraint-mass" }
+    },
+    {
+      "id": "binding-limit",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-limit" },
+      "target": { "nodeId": "constraint-mass" }
+    }
+  ]
+}

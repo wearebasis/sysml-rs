@@ -1,0 +1,143 @@
+{
+  "version": "0.2",
+  "view": "GeneralView",
+  "viewMetadata": {
+    "title": "Block Definition Diagram",
+    "subtitle": "Vehicle Platform",
+    "subject": "Vehicle",
+    "compartmentMode": "textual"
+  },
+  "nodes": [
+    {
+      "id": "block-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "icon": "PART",
+      "position": { "x": 60, "y": 80 },
+      "compartments": [
+        {
+          "id": "parts",
+          "title": "parts",
+          "kind": "text",
+          "lines": ["powertrain: Powertrain", "sensor: Sensor"]
+        },
+        {
+          "id": "values",
+          "title": "values",
+          "kind": "text",
+          "lines": ["mass: 1200 kg", "range: 450 km"]
+        },
+        {
+          "id": "ops",
+          "title": "operations",
+          "kind": "text",
+          "lines": ["start()", "shutdown()"]
+        }
+      ]
+    },
+    {
+      "id": "block-powertrain",
+      "kind": "PartDefinition",
+      "name": "Powertrain",
+      "icon": "PART",
+      "position": { "x": 340, "y": 80 },
+      "compartments": [
+        {
+          "id": "parts",
+          "title": "parts",
+          "kind": "text",
+          "lines": ["engine: Engine", "battery: Battery"]
+        }
+      ]
+    },
+    {
+      "id": "block-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "icon": "PART",
+      "position": { "x": 620, "y": 60 },
+      "compartments": [
+        {
+          "id": "values",
+          "title": "values",
+          "kind": "text",
+          "lines": ["power: 220 kW", "temp: 95 C"]
+        }
+      ]
+    },
+    {
+      "id": "block-battery",
+      "kind": "PartDefinition",
+      "name": "Battery",
+      "icon": "PART",
+      "position": { "x": 620, "y": 210 },
+      "compartments": [
+        {
+          "id": "values",
+          "title": "values",
+          "kind": "text",
+          "lines": ["capacity: 80 kWh", "voltage: 400 V"]
+        }
+      ]
+    },
+    {
+      "id": "block-component",
+      "kind": "PartDefinition",
+      "name": "Component",
+      "icon": "PART",
+      "position": { "x": 340, "y": 320 }
+    },
+    {
+      "id": "block-sensor",
+      "kind": "PartDefinition",
+      "name": "Sensor",
+      "icon": "PART",
+      "position": { "x": 620, "y": 320 }
+    },
+    {
+      "id": "block-controller",
+      "kind": "PartDefinition",
+      "name": "Controller",
+      "icon": "PART",
+      "position": { "x": 620, "y": 460 }
+    }
+  ],
+  "links": [
+    {
+      "id": "comp-vehicle-powertrain",
+      "kind": "Composition",
+      "source": { "nodeId": "block-vehicle" },
+      "target": { "nodeId": "block-powertrain" }
+    },
+    {
+      "id": "comp-powertrain-engine",
+      "kind": "Composition",
+      "source": { "nodeId": "block-powertrain" },
+      "target": { "nodeId": "block-engine" }
+    },
+    {
+      "id": "comp-powertrain-battery",
+      "kind": "Composition",
+      "source": { "nodeId": "block-powertrain" },
+      "target": { "nodeId": "block-battery" }
+    },
+    {
+      "id": "agg-vehicle-sensor",
+      "kind": "Aggregation",
+      "source": { "nodeId": "block-vehicle" },
+      "target": { "nodeId": "block-sensor" }
+    },
+    {
+      "id": "assoc-controller-sensor",
+      "kind": "Association",
+      "source": { "nodeId": "block-controller" },
+      "target": { "nodeId": "block-sensor" }
+    },
+    {
+      "id": "gen-sensor-component",
+      "kind": "Generalization",
+      "source": { "nodeId": "block-sensor" },
+      "target": { "nodeId": "block-component" }
+    }
+  ]
+}

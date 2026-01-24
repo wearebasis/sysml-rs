@@ -1,0 +1,103 @@
+{
+  "version": "0.2",
+  "view": "GeometryView",
+  "viewMetadata": {
+    "title": "Geometry View",
+    "subtitle": "Spatial Layout",
+    "subject": "VehicleProject",
+    "compartmentMode": "graphical"
+  },
+  "geometry": {
+    "frame": "2d",
+    "units": "mm",
+    "origin": { "x": 120, "y": 120 },
+    "scale": 1
+  },
+  "nodes": [
+    {
+      "id": "part-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "icon": "PART",
+      "geometry": {
+        "position": { "x": 0, "y": 0 },
+        "size": { "width": 260, "height": 140 }
+      }
+    },
+    {
+      "id": "part-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "icon": "PART",
+      "geometry": {
+        "position": { "x": 40, "y": 200 },
+        "size": { "width": 180, "height": 90 }
+      }
+    },
+    {
+      "id": "part-battery",
+      "kind": "PartDefinition",
+      "name": "Battery",
+      "icon": "PART",
+      "geometry": {
+        "position": { "x": 300, "y": 20 },
+        "size": { "width": 160, "height": 90 }
+      }
+    },
+    {
+      "id": "part-sensor",
+      "kind": "PartDefinition",
+      "name": "Sensor",
+      "icon": "PART",
+      "geometry": {
+        "position": { "x": 320, "y": 200 },
+        "size": { "width": 140, "height": 80 }
+      }
+    },
+    {
+      "id": "part-controller",
+      "kind": "PartDefinition",
+      "name": "Controller",
+      "icon": "PART",
+      "geometry": {
+        "position": { "x": 40, "y": 320 },
+        "size": { "width": 200, "height": 90 }
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "link-engine-sensor",
+      "kind": "Flow",
+      "source": { "nodeId": "part-engine" },
+      "target": { "nodeId": "part-sensor" },
+      "geometry": {
+        "points": [
+          { "x": 130, "y": 245 },
+          { "x": 220, "y": 245 },
+          { "x": 320, "y": 245 }
+        ]
+      },
+      "labels": [{ "text": "data" }]
+    },
+    {
+      "id": "link-controller-engine",
+      "kind": "Connection",
+      "source": { "nodeId": "part-controller" },
+      "target": { "nodeId": "part-engine" },
+      "geometry": {
+        "points": [
+          { "x": 140, "y": 320 },
+          { "x": 140, "y": 280 }
+        ],
+        "style": "dashed"
+      }
+    },
+    {
+      "id": "link-battery-vehicle",
+      "kind": "Allocate",
+      "source": { "nodeId": "part-battery" },
+      "target": { "nodeId": "part-vehicle" }
+    }
+  ]
+}

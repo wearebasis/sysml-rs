@@ -1,0 +1,283 @@
+{
+  "version": "0.2",
+  "view": "InterconnectionView",
+  "viewMetadata": {
+    "title": "Internal Block Diagram",
+    "subtitle": "VehicleSystem",
+    "subject": "VehicleSystem",
+    "compartmentMode": "mixed"
+  },
+  "nodes": [
+    {
+      "id": "system",
+      "kind": "PartDefinition",
+      "name": "VehicleSystem",
+      "icon": "PKG",
+      "stereotype": "<<part def>>",
+      "position": { "x": 40, "y": 40 },
+      "size": { "width": 900, "height": 480 },
+      "ports": [
+        {
+          "id": "system-telemetry",
+          "name": "telemetry",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.4,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "parts",
+          "title": "parts",
+          "kind": "text",
+          "lines": [
+            "sensor1 : Sensor",
+            "controller1 : Controller",
+            "bus1 : Bus",
+            "power1 : Power"
+          ]
+        },
+        {
+          "id": "structure",
+          "title": "structure",
+          "kind": "graphical",
+          "nodeIds": [
+            "part-usage-sensor",
+            "part-usage-controller",
+            "part-usage-bus",
+            "part-usage-power"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-sensor",
+      "kind": "PartUsage",
+      "name": "sensor1",
+      "label": "Sensor",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 120, "y": 150 },
+      "size": { "width": 200, "height": 120 },
+      "ports": [
+        {
+          "id": "sensor-data-out",
+          "name": "dataOut",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.5,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "sensor-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.7,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ]
+    },
+    {
+      "id": "part-usage-controller",
+      "kind": "PartUsage",
+      "name": "controller1",
+      "label": "Controller",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 380, "y": 150 },
+      "size": { "width": 220, "height": 140 },
+      "ports": [
+        {
+          "id": "controller-data-in",
+          "name": "dataIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.4,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "controller-data-out",
+          "name": "dataOut",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.5,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "controller-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "bottom",
+          "offset": 0.5,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ]
+    },
+    {
+      "id": "part-usage-bus",
+      "kind": "PartUsage",
+      "name": "bus1",
+      "label": "Bus",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 660, "y": 150 },
+      "size": { "width": 200, "height": 120 },
+      "ports": [
+        {
+          "id": "bus-data-in",
+          "name": "dataIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.5,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "bus-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "bottom",
+          "offset": 0.5,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ]
+    },
+    {
+      "id": "part-usage-power",
+      "kind": "PartUsage",
+      "name": "power1",
+      "label": "Power",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 380, "y": 320 },
+      "size": { "width": 220, "height": 120 },
+      "ports": [
+        {
+          "id": "power-out-sensor",
+          "name": "powerOutSensor",
+          "direction": "out",
+          "side": "top",
+          "offset": 0.2,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "power-out-controller",
+          "name": "powerOutController",
+          "direction": "out",
+          "side": "top",
+          "offset": 0.5,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "power-out-bus",
+          "name": "powerOutBus",
+          "direction": "out",
+          "side": "top",
+          "offset": 0.8,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "id": "flow-sensor-controller",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-sensor",
+        "portId": "sensor-data-out"
+      },
+      "target": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-data-in"
+      },
+      "flowItem": {
+        "itemLabel": "sensorData",
+        "multiplicity": "1",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-controller-bus",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-data-out"
+      },
+      "target": {
+        "nodeId": "part-usage-bus",
+        "portId": "bus-data-in"
+      },
+      "flowItem": {
+        "itemLabel": "busData",
+        "multiplicity": "1",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-power-sensor",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-power",
+        "portId": "power-out-sensor"
+      },
+      "target": {
+        "nodeId": "part-usage-sensor",
+        "portId": "sensor-power-in"
+      },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-power-controller",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-power",
+        "portId": "power-out-controller"
+      },
+      "target": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-power-in"
+      },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-power-bus",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-power",
+        "portId": "power-out-bus"
+      },
+      "target": {
+        "nodeId": "part-usage-bus",
+        "portId": "bus-power-in"
+      },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    }
+  ]
+}

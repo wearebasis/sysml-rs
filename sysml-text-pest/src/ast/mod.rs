@@ -11,13 +11,43 @@
 //!
 //! Visibility is extracted from the grammar's `*Member` wrapper rules (e.g.,
 //! `UsageMember`, `DefinitionMember`) and propagated to the owned elements.
+//!
+//! ## Relationship Construction
+//!
+//! This converter creates relationship elements (Specialization, FeatureTyping,
+//! Subsetting, Redefinition) from syntax like `:>`, `:`, `:>>`. Target qualified
+//! names are stored as `unresolved_*` properties for later resolution in Phase 2c.
+//!
+//! ## Single-Pass Extraction
+//!
+//! This module uses optimized extraction functions that traverse each pest pair
+//! only once, instead of multiple times for different properties. This reduces
+//! overhead from repeated `.clone().into_inner()` calls, providing ~68% faster
+//! parsing for large models.
+
+mod extraction;
 
 use pest::iterators::{Pair, Pairs};
-use sysml_core::{Element, ElementKind, ModelGraph, VisibilityKind};
+use sysml_core::{Element, ElementKind, ModelGraph, Value, VisibilityKind};
 use sysml_id::ElementId;
 use sysml_span::Span;
 
 use crate::{ParseError, Rule};
+
+use extraction::{DefinitionExtraction, PackageExtraction, UsageExtraction};
+
+/// Work item for iterative tree traversal.
+///
+/// Instead of using recursion (which can overflow the stack for large files),
+/// we use an explicit work stack with these item types.
+enum WorkItem<'a> {
+    /// Process this pair (main work item)
+    ProcessPair(Pair<'a, Rule>),
+    /// Pop the visibility stack after processing children
+    PopVisibility,
+    /// Pop the owner stack after processing children
+    PopOwner,
+}
 
 /// Converter from pest pairs to ModelGraph.
 pub struct Converter<'a> {
@@ -82,358 +112,481 @@ impl<'a> Converter<'a> {
         }
     }
 
-    /// Convert pest pairs to ModelGraph.
+    /// Convert pest pairs to ModelGraph using iterative traversal.
+    ///
+    /// This uses an explicit work stack instead of recursion to handle
+    /// deeply nested parse trees without stack overflow.
     pub fn convert(mut self, pairs: Pairs<'_, Rule>, graph: &mut ModelGraph) -> Result<(), ParseError> {
-        for pair in pairs {
-            self.convert_pair(pair, graph)?;
+        // Initialize work stack with top-level pairs (in reverse order for LIFO processing)
+        let mut work_stack: Vec<WorkItem<'_>> = pairs
+            .map(WorkItem::ProcessPair)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+
+        // Process work items iteratively
+        while let Some(item) = work_stack.pop() {
+            match item {
+                WorkItem::ProcessPair(pair) => {
+                    self.process_pair(pair, graph, &mut work_stack)?;
+                }
+                WorkItem::PopVisibility => {
+                    self.visibility_stack.pop();
+                }
+                WorkItem::PopOwner => {
+                    self.owner_stack.pop();
+                }
+            }
         }
         Ok(())
     }
 
-    /// Convert a single pair and its children.
-    fn convert_pair(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph) -> Result<Option<ElementId>, ParseError> {
+    /// Process a single pair, pushing work items for children instead of recursing.
+    ///
+    /// This is the core of the iterative traversal. Instead of calling itself
+    /// recursively, it pushes `WorkItem::ProcessPair` onto the work stack.
+    fn process_pair<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
         let rule = pair.as_rule();
         let span = self.pair_to_span(&pair);
 
         match rule {
             // Skip tokens and whitespace
             Rule::WHITESPACE | Rule::NEWLINE | Rule::COMMENT | Rule::SL_COMMENT | Rule::ML_COMMENT
-            | Rule::SL_NOTE | Rule::ML_NOTE | Rule::EOI => Ok(None),
+            | Rule::SL_NOTE | Rule::ML_NOTE | Rule::EOI => {}
 
-            // Entry points
+            // Entry points - push children
             Rule::File | Rule::Model => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+                self.push_children(pair, work_stack);
             }
 
             // Packages
-            Rule::Package => self.convert_package(pair, graph, span),
-            Rule::LibraryPackage => self.convert_library_package(pair, graph, span),
+            Rule::Package => {
+                self.process_package(pair, graph, span, work_stack)?;
+            }
+            Rule::LibraryPackage => {
+                self.process_library_package(pair, graph, span, work_stack)?;
+            }
 
-            // Package body elements
+            // Package body elements - push children
             Rule::PackageBodyElement => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+                self.push_children(pair, work_stack);
             }
 
-            // Definitions
-            Rule::DefinitionElement | Rule::DefinitionMember => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+            // Definitions - DefinitionElement passes through, DefinitionMember extracts visibility
+            Rule::DefinitionElement => {
+                self.push_children(pair, work_stack);
+            }
+            Rule::DefinitionMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                // Push PopVisibility BEFORE children (will execute AFTER due to LIFO)
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
             }
 
-            Rule::AttributeDefinition => self.convert_definition(pair, graph, ElementKind::AttributeDefinition, span),
-            Rule::EnumerationDefinition => self.convert_definition(pair, graph, ElementKind::EnumerationDefinition, span),
-            Rule::OccurrenceDefinition => self.convert_definition(pair, graph, ElementKind::OccurrenceDefinition, span),
-            Rule::ItemDefinition => self.convert_definition(pair, graph, ElementKind::ItemDefinition, span),
-            Rule::MetadataDefinition => self.convert_definition(pair, graph, ElementKind::MetadataDefinition, span),
-            Rule::PartDefinition => self.convert_definition(pair, graph, ElementKind::PartDefinition, span),
-            Rule::PortDefinition => self.convert_definition(pair, graph, ElementKind::PortDefinition, span),
-            Rule::ConnectionDefinition => self.convert_definition(pair, graph, ElementKind::ConnectionDefinition, span),
-            Rule::FlowConnectionDefinition => self.convert_definition(pair, graph, ElementKind::ConnectionDefinition, span),
-            Rule::InterfaceDefinition => self.convert_definition(pair, graph, ElementKind::InterfaceDefinition, span),
-            Rule::AllocationDefinition => self.convert_definition(pair, graph, ElementKind::AllocationDefinition, span),
-            Rule::ActionDefinition => self.convert_definition(pair, graph, ElementKind::ActionDefinition, span),
-            Rule::CalculationDefinition => self.convert_definition(pair, graph, ElementKind::CalculationDefinition, span),
-            Rule::StateDefinition => self.convert_definition(pair, graph, ElementKind::StateDefinition, span),
-            Rule::ConstraintDefinition => self.convert_definition(pair, graph, ElementKind::ConstraintDefinition, span),
-            Rule::RequirementDefinition => self.convert_definition(pair, graph, ElementKind::RequirementDefinition, span),
-            Rule::ConcernDefinition => self.convert_definition(pair, graph, ElementKind::ConcernDefinition, span),
-            Rule::CaseDefinition => self.convert_definition(pair, graph, ElementKind::CaseDefinition, span),
-            Rule::AnalysisCaseDefinition => self.convert_definition(pair, graph, ElementKind::AnalysisCaseDefinition, span),
-            Rule::VerificationCaseDefinition => self.convert_definition(pair, graph, ElementKind::VerificationCaseDefinition, span),
-            Rule::UseCaseDefinition => self.convert_definition(pair, graph, ElementKind::UseCaseDefinition, span),
-            Rule::ViewDefinition => self.convert_definition(pair, graph, ElementKind::ViewDefinition, span),
-            Rule::ViewpointDefinition => self.convert_definition(pair, graph, ElementKind::ViewpointDefinition, span),
-            Rule::RenderingDefinition => self.convert_definition(pair, graph, ElementKind::RenderingDefinition, span),
-            Rule::ExtendedDefinition => self.convert_definition(pair, graph, ElementKind::Definition, span),
+            Rule::AttributeDefinition => { self.process_definition(pair, graph, ElementKind::AttributeDefinition, span, work_stack)?; }
+            Rule::EnumerationDefinition => { self.process_definition(pair, graph, ElementKind::EnumerationDefinition, span, work_stack)?; }
+            Rule::OccurrenceDefinition => { self.process_definition(pair, graph, ElementKind::OccurrenceDefinition, span, work_stack)?; }
+            Rule::ItemDefinition => { self.process_definition(pair, graph, ElementKind::ItemDefinition, span, work_stack)?; }
+            Rule::MetadataDefinition => { self.process_definition(pair, graph, ElementKind::MetadataDefinition, span, work_stack)?; }
+            Rule::PartDefinition => { self.process_definition(pair, graph, ElementKind::PartDefinition, span, work_stack)?; }
+            Rule::PortDefinition => { self.process_definition(pair, graph, ElementKind::PortDefinition, span, work_stack)?; }
+            Rule::ConnectionDefinition => { self.process_definition(pair, graph, ElementKind::ConnectionDefinition, span, work_stack)?; }
+            Rule::FlowConnectionDefinition => { self.process_definition(pair, graph, ElementKind::FlowDefinition, span, work_stack)?; }
+            Rule::InterfaceDefinition => { self.process_definition(pair, graph, ElementKind::InterfaceDefinition, span, work_stack)?; }
+            Rule::AllocationDefinition => { self.process_definition(pair, graph, ElementKind::AllocationDefinition, span, work_stack)?; }
+            Rule::ActionDefinition => { self.process_definition(pair, graph, ElementKind::ActionDefinition, span, work_stack)?; }
+            Rule::CalculationDefinition => { self.process_definition(pair, graph, ElementKind::CalculationDefinition, span, work_stack)?; }
+            Rule::StateDefinition => { self.process_definition(pair, graph, ElementKind::StateDefinition, span, work_stack)?; }
+            Rule::ConstraintDefinition => { self.process_definition(pair, graph, ElementKind::ConstraintDefinition, span, work_stack)?; }
+            Rule::RequirementDefinition => { self.process_definition(pair, graph, ElementKind::RequirementDefinition, span, work_stack)?; }
+            Rule::ConcernDefinition => { self.process_definition(pair, graph, ElementKind::ConcernDefinition, span, work_stack)?; }
+            Rule::CaseDefinition => { self.process_definition(pair, graph, ElementKind::CaseDefinition, span, work_stack)?; }
+            Rule::AnalysisCaseDefinition => { self.process_definition(pair, graph, ElementKind::AnalysisCaseDefinition, span, work_stack)?; }
+            Rule::VerificationCaseDefinition => { self.process_definition(pair, graph, ElementKind::VerificationCaseDefinition, span, work_stack)?; }
+            Rule::UseCaseDefinition => { self.process_definition(pair, graph, ElementKind::UseCaseDefinition, span, work_stack)?; }
+            Rule::ViewDefinition => { self.process_definition(pair, graph, ElementKind::ViewDefinition, span, work_stack)?; }
+            Rule::ViewpointDefinition => { self.process_definition(pair, graph, ElementKind::ViewpointDefinition, span, work_stack)?; }
+            Rule::RenderingDefinition => { self.process_definition(pair, graph, ElementKind::RenderingDefinition, span, work_stack)?; }
+            Rule::ExtendedDefinition => { self.process_definition(pair, graph, ElementKind::Definition, span, work_stack)?; }
 
-            // Usages
-            Rule::UsageElement | Rule::UsageMember | Rule::NonOccurrenceUsageElement | Rule::OccurrenceUsageElement
-            | Rule::StructureUsageElement | Rule::BehaviorUsageElement | Rule::VariantUsageElement
-            | Rule::NonOccurrenceUsageMember | Rule::OccurrenceUsageMember | Rule::VariantUsageMember => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+            // KerML definitions (for standard library parsing)
+            Rule::ClassifierDefinition => { self.process_definition(pair, graph, ElementKind::Classifier, span, work_stack)?; }
+            Rule::DatatypeDefinition => { self.process_definition(pair, graph, ElementKind::DataType, span, work_stack)?; }
+            Rule::ClassDefinition => { self.process_definition(pair, graph, ElementKind::Class, span, work_stack)?; }
+            Rule::StructDefinition => { self.process_definition(pair, graph, ElementKind::Structure, span, work_stack)?; }
+            Rule::AssociationDefinition => { self.process_definition(pair, graph, ElementKind::Association, span, work_stack)?; }
+            Rule::AssociationStructDefinition => { self.process_definition(pair, graph, ElementKind::AssociationStructure, span, work_stack)?; }
+            Rule::MultiplicityDefinition => { self.process_definition(pair, graph, ElementKind::Multiplicity, span, work_stack)?; }
+            Rule::FeatureDefinition => { self.process_usage(pair, graph, ElementKind::Feature, span, work_stack)?; }
+            Rule::BehaviorDefinition => { self.process_definition(pair, graph, ElementKind::Behavior, span, work_stack)?; }
+            Rule::FunctionDefinition => { self.process_definition(pair, graph, ElementKind::Function, span, work_stack)?; }
+            Rule::PredicateDefinition => { self.process_definition(pair, graph, ElementKind::Predicate, span, work_stack)?; }
+            Rule::InteractionDefinition => { self.process_definition(pair, graph, ElementKind::Interaction, span, work_stack)?; }
+            Rule::MetaclassDefinition => { self.process_definition(pair, graph, ElementKind::Metaclass, span, work_stack)?; }
+
+            // KerML feature usages (for standard library parsing)
+            Rule::StepUsage => { self.process_usage(pair, graph, ElementKind::Step, span, work_stack)?; }
+            Rule::ExpressionUsage => { self.process_usage(pair, graph, ElementKind::Expression, span, work_stack)?; }
+            Rule::BooleanExpressionUsage => { self.process_usage(pair, graph, ElementKind::BooleanExpression, span, work_stack)?; }
+            Rule::InvariantUsage => { self.process_usage(pair, graph, ElementKind::Invariant, span, work_stack)?; }
+
+            // Usages - *Element rules pass through, *Member rules extract visibility
+            Rule::UsageElement | Rule::NonOccurrenceUsageElement | Rule::OccurrenceUsageElement
+            | Rule::StructureUsageElement | Rule::BehaviorUsageElement | Rule::VariantUsageElement => {
+                self.push_children(pair, work_stack);
+            }
+            Rule::UsageMember | Rule::NonOccurrenceUsageMember | Rule::OccurrenceUsageMember | Rule::VariantUsageMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
             }
 
-            Rule::ReferenceUsage | Rule::DefaultReferenceUsage => self.convert_usage(pair, graph, ElementKind::ReferenceUsage, span),
-            Rule::AttributeUsage => self.convert_usage(pair, graph, ElementKind::AttributeUsage, span),
-            Rule::EnumerationUsage => self.convert_usage(pair, graph, ElementKind::EnumerationUsage, span),
-            Rule::OccurrenceUsage => self.convert_usage(pair, graph, ElementKind::OccurrenceUsage, span),
-            Rule::IndividualUsage => self.convert_usage(pair, graph, ElementKind::OccurrenceUsage, span),
-            Rule::PortionUsage => self.convert_usage(pair, graph, ElementKind::OccurrenceUsage, span),
-            Rule::EventOccurrenceUsage => self.convert_usage(pair, graph, ElementKind::EventOccurrenceUsage, span),
-            Rule::ItemUsage => self.convert_usage(pair, graph, ElementKind::ItemUsage, span),
-            Rule::PartUsage => self.convert_usage(pair, graph, ElementKind::PartUsage, span),
-            Rule::PortUsage => self.convert_usage(pair, graph, ElementKind::PortUsage, span),
-            Rule::ConnectionUsage => self.convert_usage(pair, graph, ElementKind::ConnectionUsage, span),
-            Rule::InterfaceUsage => self.convert_usage(pair, graph, ElementKind::InterfaceUsage, span),
-            Rule::AllocationUsage => self.convert_usage(pair, graph, ElementKind::AllocationUsage, span),
-            Rule::FlowConnectionUsage => self.convert_usage(pair, graph, ElementKind::ConnectionUsage, span),
-            Rule::ViewUsage => self.convert_usage(pair, graph, ElementKind::ViewUsage, span),
-            Rule::RenderingUsage => self.convert_usage(pair, graph, ElementKind::RenderingUsage, span),
-            Rule::ActionUsage => self.convert_usage(pair, graph, ElementKind::ActionUsage, span),
-            Rule::PerformActionUsage => self.convert_usage(pair, graph, ElementKind::PerformActionUsage, span),
-            Rule::CalculationUsage => self.convert_usage(pair, graph, ElementKind::CalculationUsage, span),
-            Rule::StateUsage => self.convert_usage(pair, graph, ElementKind::StateUsage, span),
-            Rule::ExhibitStateUsage => self.convert_usage(pair, graph, ElementKind::ExhibitStateUsage, span),
-            Rule::ConstraintUsage => self.convert_usage(pair, graph, ElementKind::ConstraintUsage, span),
-            Rule::AssertConstraintUsage => self.convert_usage(pair, graph, ElementKind::AssertConstraintUsage, span),
-            Rule::RequirementUsage => self.convert_usage(pair, graph, ElementKind::RequirementUsage, span),
-            Rule::SatisfyRequirementUsage => self.convert_usage(pair, graph, ElementKind::SatisfyRequirementUsage, span),
-            Rule::ConcernUsage => self.convert_usage(pair, graph, ElementKind::ConcernUsage, span),
-            Rule::CaseUsage => self.convert_usage(pair, graph, ElementKind::CaseUsage, span),
-            Rule::AnalysisCaseUsage => self.convert_usage(pair, graph, ElementKind::AnalysisCaseUsage, span),
-            Rule::VerificationCaseUsage => self.convert_usage(pair, graph, ElementKind::VerificationCaseUsage, span),
-            Rule::UseCaseUsage => self.convert_usage(pair, graph, ElementKind::UseCaseUsage, span),
-            Rule::IncludeUseCaseUsage => self.convert_usage(pair, graph, ElementKind::IncludeUseCaseUsage, span),
-            Rule::ViewpointUsage => self.convert_usage(pair, graph, ElementKind::ViewpointUsage, span),
-            Rule::BindingConnectorAsUsage => self.convert_usage(pair, graph, ElementKind::BindingConnectorAsUsage, span),
-            Rule::SuccessionAsUsage => self.convert_usage(pair, graph, ElementKind::SuccessionAsUsage, span),
-            Rule::ExtendedUsage => self.convert_usage(pair, graph, ElementKind::Usage, span),
-            Rule::VariantReference => self.convert_usage(pair, graph, ElementKind::ReferenceUsage, span),
+            Rule::ReferenceUsage | Rule::DefaultReferenceUsage => { self.process_usage(pair, graph, ElementKind::ReferenceUsage, span, work_stack)?; }
+            Rule::AttributeUsage => { self.process_usage(pair, graph, ElementKind::AttributeUsage, span, work_stack)?; }
+            Rule::EnumerationUsage => { self.process_usage(pair, graph, ElementKind::EnumerationUsage, span, work_stack)?; }
+            Rule::OccurrenceUsage => { self.process_usage(pair, graph, ElementKind::OccurrenceUsage, span, work_stack)?; }
+            Rule::IndividualUsage => { self.process_usage(pair, graph, ElementKind::OccurrenceUsage, span, work_stack)?; }
+            Rule::PortionUsage => { self.process_usage(pair, graph, ElementKind::OccurrenceUsage, span, work_stack)?; }
+            Rule::EventOccurrenceUsage => { self.process_usage(pair, graph, ElementKind::EventOccurrenceUsage, span, work_stack)?; }
+            Rule::ItemUsage => { self.process_usage(pair, graph, ElementKind::ItemUsage, span, work_stack)?; }
+            Rule::PartUsage => { self.process_usage(pair, graph, ElementKind::PartUsage, span, work_stack)?; }
+            Rule::PortUsage => { self.process_usage(pair, graph, ElementKind::PortUsage, span, work_stack)?; }
+            Rule::ConnectionUsage => { self.process_usage(pair, graph, ElementKind::ConnectionUsage, span, work_stack)?; }
+            Rule::InterfaceUsage => { self.process_usage(pair, graph, ElementKind::InterfaceUsage, span, work_stack)?; }
+            Rule::AllocationUsage => { self.process_usage(pair, graph, ElementKind::AllocationUsage, span, work_stack)?; }
+            Rule::FlowConnectionUsage => { self.process_usage(pair, graph, ElementKind::FlowUsage, span, work_stack)?; }
+            Rule::SuccessionFlowUsage => { self.process_usage(pair, graph, ElementKind::SuccessionFlowUsage, span, work_stack)?; }
+            Rule::ViewUsage => { self.process_usage(pair, graph, ElementKind::ViewUsage, span, work_stack)?; }
+            Rule::RenderingUsage => { self.process_usage(pair, graph, ElementKind::RenderingUsage, span, work_stack)?; }
+            Rule::ActionUsage => { self.process_usage(pair, graph, ElementKind::ActionUsage, span, work_stack)?; }
+            Rule::PerformActionUsage => { self.process_usage(pair, graph, ElementKind::PerformActionUsage, span, work_stack)?; }
+            Rule::CalculationUsage => { self.process_usage(pair, graph, ElementKind::CalculationUsage, span, work_stack)?; }
+            Rule::StateUsage => { self.process_usage(pair, graph, ElementKind::StateUsage, span, work_stack)?; }
+            Rule::ExhibitStateUsage => { self.process_usage(pair, graph, ElementKind::ExhibitStateUsage, span, work_stack)?; }
+            Rule::ConstraintUsage => { self.process_usage(pair, graph, ElementKind::ConstraintUsage, span, work_stack)?; }
+            Rule::AssertConstraintUsage => { self.process_usage(pair, graph, ElementKind::AssertConstraintUsage, span, work_stack)?; }
+            Rule::RequirementUsage => { self.process_usage(pair, graph, ElementKind::RequirementUsage, span, work_stack)?; }
+            Rule::SatisfyRequirementUsage => { self.process_usage(pair, graph, ElementKind::SatisfyRequirementUsage, span, work_stack)?; }
+            Rule::ConcernUsage => { self.process_usage(pair, graph, ElementKind::ConcernUsage, span, work_stack)?; }
+            Rule::CaseUsage => { self.process_usage(pair, graph, ElementKind::CaseUsage, span, work_stack)?; }
+            Rule::AnalysisCaseUsage => { self.process_usage(pair, graph, ElementKind::AnalysisCaseUsage, span, work_stack)?; }
+            Rule::VerificationCaseUsage => { self.process_usage(pair, graph, ElementKind::VerificationCaseUsage, span, work_stack)?; }
+            Rule::UseCaseUsage => { self.process_usage(pair, graph, ElementKind::UseCaseUsage, span, work_stack)?; }
+            Rule::IncludeUseCaseUsage => { self.process_usage(pair, graph, ElementKind::IncludeUseCaseUsage, span, work_stack)?; }
+            Rule::ViewpointUsage => { self.process_usage(pair, graph, ElementKind::ViewpointUsage, span, work_stack)?; }
+            Rule::BindingConnectorAsUsage => { self.process_usage(pair, graph, ElementKind::BindingConnectorAsUsage, span, work_stack)?; }
+            Rule::SuccessionAsUsage => { self.process_usage(pair, graph, ElementKind::SuccessionAsUsage, span, work_stack)?; }
+            Rule::ExtendedUsage => { self.process_usage(pair, graph, ElementKind::Usage, span, work_stack)?; }
+            Rule::VariantReference => { self.process_usage(pair, graph, ElementKind::ReferenceUsage, span, work_stack)?; }
+
+            // Action nodes (map to specific ActionUsage subtypes)
+            Rule::SendNode => { self.process_usage(pair, graph, ElementKind::SendActionUsage, span, work_stack)?; }
+            Rule::AcceptNode => { self.process_usage(pair, graph, ElementKind::AcceptActionUsage, span, work_stack)?; }
+            Rule::AssignmentNode => { self.process_usage(pair, graph, ElementKind::AssignmentActionUsage, span, work_stack)?; }
+            Rule::TerminateNode => { self.process_usage(pair, graph, ElementKind::TerminateActionUsage, span, work_stack)?; }
+            Rule::IfNode => { self.process_usage(pair, graph, ElementKind::IfActionUsage, span, work_stack)?; }
+            Rule::WhileLoopNode => { self.process_usage(pair, graph, ElementKind::WhileLoopActionUsage, span, work_stack)?; }
+            Rule::ForLoopNode => { self.process_usage(pair, graph, ElementKind::ForLoopActionUsage, span, work_stack)?; }
+
+            // Transitions
+            Rule::TransitionUsage => { self.process_usage(pair, graph, ElementKind::TransitionUsage, span, work_stack)?; }
+
+            // ActionNode/ControlNode wrappers - push children
+            Rule::ActionNode | Rule::ControlNode => {
+                self.push_children(pair, work_stack);
+            }
 
             // Imports
-            Rule::Import => self.convert_import(pair, graph, span),
+            Rule::Import => { self.process_import(pair, graph, span)?; }
 
-            // Annotations
-            Rule::AnnotatingMember | Rule::AnnotatingElement => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+            // Annotations - AnnotatingElement passes through, AnnotatingMember extracts visibility
+            Rule::AnnotatingElement => {
+                self.push_children(pair, work_stack);
             }
-            Rule::Comment => self.convert_comment(pair, graph, span),
-            Rule::Documentation => self.convert_documentation(pair, graph, span),
-            Rule::MetadataUsage => self.convert_metadata_usage(pair, graph, span),
+            Rule::AnnotatingMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+            Rule::Comment => { self.process_comment(pair, graph, span)?; }
+            Rule::Documentation => { self.process_documentation(pair, graph, span)?; }
+            Rule::MetadataUsage => { self.process_metadata_usage(pair, graph, span, work_stack)?; }
 
-            // Dependencies
-            Rule::Dependency => self.convert_dependency(pair, graph, span),
+            // Dependencies - RelationshipMember extracts visibility
+            Rule::Dependency => { self.process_dependency(pair, graph, span)?; }
             Rule::RelationshipMember => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
             }
 
-            // Skip intermediate rules - process their children
+            // Skip intermediate rules - push their children
             Rule::DefinitionBody | Rule::DefinitionBodyItem | Rule::PackageBody
             | Rule::ActionBody | Rule::ActionBodyItem | Rule::StateBody | Rule::StateBodyItem
-            | Rule::CalculationBody | Rule::CalculationBodyItem | Rule::RequirementBody | Rule::RequirementBodyItem
+            | Rule::CalculationBody | Rule::CalculationBodyItem | Rule::FunctionBody | Rule::FunctionBodyItem | Rule::RequirementBody | Rule::RequirementBodyItem
             | Rule::CaseBody | Rule::CaseBodyItem | Rule::ViewBody | Rule::ViewBodyItem
             | Rule::InterfaceBody | Rule::InterfaceBodyItem | Rule::EnumerationBody | Rule::EnumerationBodyItem
             | Rule::MetadataBody | Rule::MetadataBodyItem => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+                self.push_children(pair, work_stack);
             }
 
-            // Names and identifiers - return name as string (for extraction)
+            // Names and identifiers - no action needed
             Rule::Name | Rule::ID | Rule::UNRESTRICTED_NAME | Rule::QualifiedName
             | Rule::RegularName | Rule::ShortName | Rule::Identification => {
                 // Names are extracted by parent rules
-                Ok(None)
             }
 
             // Tokens and keywords - skip
-            _ if rule_is_keyword(rule) => Ok(None),
+            _ if rule_is_keyword(rule) => {}
 
-            // Default: process children
+            // Default: push children
             _ => {
-                for inner in pair.into_inner() {
-                    self.convert_pair(inner, graph)?;
-                }
-                Ok(None)
+                self.push_children(pair, work_stack);
             }
+        }
+        Ok(())
+    }
+
+    /// Push children of a pair onto the work stack in reverse order (for LIFO processing).
+    fn push_children<'b>(&self, pair: Pair<'b, Rule>, work_stack: &mut Vec<WorkItem<'b>>) {
+        let children: Vec<_> = pair.into_inner().collect();
+        for child in children.into_iter().rev() {
+            work_stack.push(WorkItem::ProcessPair(child));
         }
     }
 
-    /// Convert a Package to an Element.
-    fn convert_package(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a Package using single-pass extraction.
+    fn process_package<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
+        let extraction = PackageExtraction::from_pair(pair, false);
+
         let mut element = Element::new_with_kind(ElementKind::Package);
 
-        // Extract name from identification
-        if let Some(name) = self.extract_name(&pair) {
+        if let Some(name) = extraction.name {
             element.name = Some(name);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
-        // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        let id = self.add_with_ownership(element, graph);
 
-        // Process children with this package as owner
-        self.owner_stack.push(id.clone());
-        for inner in pair.into_inner() {
-            self.convert_pair(inner, graph)?;
+        self.owner_stack.push(id);
+        work_stack.push(WorkItem::PopOwner);
+
+        for body_pair in extraction.body_pairs.into_iter().rev() {
+            work_stack.push(WorkItem::ProcessPair(body_pair));
         }
-        self.owner_stack.pop();
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert a LibraryPackage to an Element.
-    fn convert_library_package(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a LibraryPackage using single-pass extraction.
+    fn process_library_package<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
+        let extraction = PackageExtraction::from_pair(pair, true);
+
         let mut element = Element::new_with_kind(ElementKind::LibraryPackage);
 
-        // Extract name from identification
-        if let Some(name) = self.extract_name(&pair) {
+        if let Some(name) = extraction.name {
             element.name = Some(name);
         }
 
-        // Check for 'standard' flag
-        let text = pair.as_str();
-        if text.starts_with("standard") {
+        if extraction.is_standard {
             element.set_prop("isStandard", true);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
-        // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        let id = self.add_with_ownership(element, graph);
 
-        // Process children with this package as owner
-        self.owner_stack.push(id.clone());
-        for inner in pair.into_inner() {
-            self.convert_pair(inner, graph)?;
+        self.owner_stack.push(id);
+        work_stack.push(WorkItem::PopOwner);
+
+        for body_pair in extraction.body_pairs.into_iter().rev() {
+            work_stack.push(WorkItem::ProcessPair(body_pair));
         }
-        self.owner_stack.pop();
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert a definition to an Element.
-    fn convert_definition(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, kind: ElementKind, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a definition using single-pass extraction.
+    fn process_definition<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        kind: ElementKind,
+        span: Option<Span>,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
+        let extraction = DefinitionExtraction::from_pair(pair);
+
         let mut element = Element::new_with_kind(kind);
 
-        // Extract name from identification
-        if let Some(name) = self.extract_name(&pair) {
+        if let Some(name) = extraction.name {
             element.name = Some(name);
         }
 
-        // Check for 'abstract' flag
-        let text = pair.as_str();
-        if text.contains("abstract") {
+        if extraction.is_abstract {
             element.set_prop("isAbstract", true);
         }
-
-        // Check for 'variation' flag
-        if text.contains("variation") {
+        if extraction.is_variation {
             element.set_prop("isVariation", true);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
-        // Add span
-        if let Some(s) = span {
+        if let Some(s) = span.clone() {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        let id = self.add_with_ownership(element, graph);
 
-        // Process children with this definition as owner
-        self.owner_stack.push(id.clone());
-        for inner in pair.into_inner() {
-            self.convert_pair(inner, graph)?;
+        // Create Specialization elements for each subclassification target
+        for target_qname in extraction.subclassifications {
+            self.create_specialization(id.clone(), target_qname, graph, span.clone());
         }
-        self.owner_stack.pop();
 
-        Ok(Some(id))
+        self.owner_stack.push(id);
+        work_stack.push(WorkItem::PopOwner);
+
+        for body_pair in extraction.body_pairs.into_iter().rev() {
+            work_stack.push(WorkItem::ProcessPair(body_pair));
+        }
+
+        Ok(())
     }
 
-    /// Convert a usage to an Element.
-    fn convert_usage(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, kind: ElementKind, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a usage using single-pass extraction.
+    fn process_usage<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        kind: ElementKind,
+        span: Option<Span>,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
+        let extraction = UsageExtraction::from_pair(pair);
+
         let mut element = Element::new_with_kind(kind);
 
-        // Extract name from identification
-        if let Some(name) = self.extract_name(&pair) {
+        if let Some(name) = extraction.name {
             element.name = Some(name);
         }
 
-        // Check for directional flags
-        let text = pair.as_str();
-        if text.starts_with("in ") || text.contains(" in ") {
-            element.set_prop("direction", "in");
-        } else if text.starts_with("out ") || text.contains(" out ") {
-            element.set_prop("direction", "out");
-        } else if text.starts_with("inout ") || text.contains(" inout ") {
-            element.set_prop("direction", "inout");
+        if let Some(direction) = extraction.direction {
+            element.set_prop("direction", direction);
         }
 
-        // Check for other flags
-        if text.contains("abstract") {
+        if let Some((lower, upper)) = extraction.multiplicity {
+            element.set_prop("multiplicity_lower", Value::Int(lower));
+            match upper {
+                Some(u) => element.set_prop("multiplicity_upper", Value::Int(u)),
+                None => element.set_prop("multiplicity_upper", Value::String("*".to_string())),
+            }
+        }
+
+        if let Some(value_expression) = extraction.value_expression {
+            element.set_prop("unresolved_value", Value::String(value_expression));
+            if extraction.value_is_default {
+                element.set_prop("isDefault", true);
+            }
+            if extraction.value_is_initial {
+                element.set_prop("isInitial", true);
+            }
+        }
+
+        // Apply flags
+        if extraction.is_abstract {
             element.set_prop("isAbstract", true);
         }
-        if text.contains("variation") {
+        if extraction.is_variation {
             element.set_prop("isVariation", true);
         }
-        if text.contains("readonly") {
+        if extraction.is_readonly {
             element.set_prop("isReadOnly", true);
         }
-        if text.contains("derived") {
+        if extraction.is_derived {
             element.set_prop("isDerived", true);
         }
-        if text.contains("end") {
+        if extraction.is_end {
             element.set_prop("isEnd", true);
         }
-        if text.contains("ref ") {
+        if extraction.is_reference {
             element.set_prop("isReference", true);
         }
-
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
+        if extraction.is_composite {
+            element.set_prop("isComposite", true);
+        }
+        if extraction.is_portion {
+            element.set_prop("isPortion", true);
+        }
+        if extraction.is_variable {
+            element.set_prop("isVariable", true);
+        }
+        if extraction.is_constant {
+            element.set_prop("isConstant", true);
         }
 
-        // Add span
-        if let Some(s) = span {
+        if let Some(s) = span.clone() {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        let id = self.add_with_ownership(element, graph);
 
-        // Process children with this usage as owner
-        self.owner_stack.push(id.clone());
-        for inner in pair.into_inner() {
-            self.convert_pair(inner, graph)?;
+        // Create FeatureTyping elements
+        for type_qname in extraction.typings {
+            self.create_feature_typing(id.clone(), type_qname, graph, span.clone());
         }
-        self.owner_stack.pop();
 
-        Ok(Some(id))
+        // Create Subsetting elements
+        for subsetted in extraction.subsettings {
+            self.create_subsetting(id.clone(), subsetted, graph, span.clone());
+        }
+
+        // Create Redefinition elements
+        for redefined in extraction.redefinitions {
+            self.create_redefinition(id.clone(), redefined, graph, span.clone());
+        }
+
+        // Create ReferenceSubsetting elements
+        for referenced in extraction.references {
+            self.create_reference_subsetting(id.clone(), referenced, graph, span.clone());
+        }
+
+        self.owner_stack.push(id);
+        work_stack.push(WorkItem::PopOwner);
+
+        for body_pair in extraction.body_pairs.into_iter().rev() {
+            work_stack.push(WorkItem::ProcessPair(body_pair));
+        }
+
+        Ok(())
     }
 
-    /// Convert an Import to an Element.
-    fn convert_import(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process an Import (no children to process).
+    fn process_import(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<(), ParseError> {
         let mut element = Element::new_with_kind(ElementKind::Import);
 
         // Extract the imported reference
@@ -453,24 +606,19 @@ impl<'a> Converter<'a> {
             element.set_prop("isRecursive", true);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
         // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        // Add element with canonical ownership
+        self.add_with_ownership(element, graph);
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert a Comment to an Element.
-    fn convert_comment(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a Comment (no children to process).
+    fn process_comment(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<(), ParseError> {
         let mut element = Element::new_with_kind(ElementKind::Comment);
 
         // Extract comment body
@@ -482,24 +630,19 @@ impl<'a> Converter<'a> {
             }
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
         // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        // Add element with canonical ownership
+        self.add_with_ownership(element, graph);
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert Documentation to an Element.
-    fn convert_documentation(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process Documentation (no children to process).
+    fn process_documentation(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<(), ParseError> {
         let mut element = Element::new_with_kind(ElementKind::Documentation);
 
         // Extract documentation body
@@ -511,24 +654,25 @@ impl<'a> Converter<'a> {
             }
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
         // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        // Add element with canonical ownership
+        self.add_with_ownership(element, graph);
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert MetadataUsage to an Element.
-    fn convert_metadata_usage(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process MetadataUsage, pushing children onto the work stack.
+    fn process_metadata_usage<'b>(
+        &mut self,
+        pair: Pair<'b, Rule>,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+        work_stack: &mut Vec<WorkItem<'b>>,
+    ) -> Result<(), ParseError> {
         let mut element = Element::new_with_kind(ElementKind::MetadataUsage);
 
         // Extract name if present
@@ -536,31 +680,24 @@ impl<'a> Converter<'a> {
             element.name = Some(name);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
-        }
-
         // Add span
         if let Some(s) = span {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        // Add element with canonical ownership
+        let id = self.add_with_ownership(element, graph);
 
-        // Process children with this metadata as owner
-        self.owner_stack.push(id.clone());
-        for inner in pair.into_inner() {
-            self.convert_pair(inner, graph)?;
-        }
-        self.owner_stack.pop();
+        // Push owner and schedule children
+        self.owner_stack.push(id);
+        work_stack.push(WorkItem::PopOwner);
+        self.push_children(pair, work_stack);
 
-        Ok(Some(id))
+        Ok(())
     }
 
-    /// Convert a Dependency to an Element and Relationships.
-    fn convert_dependency(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<Option<ElementId>, ParseError> {
+    /// Process a Dependency (no children to process).
+    fn process_dependency(&mut self, pair: Pair<'_, Rule>, graph: &mut ModelGraph, span: Option<Span>) -> Result<(), ParseError> {
         let mut element = Element::new_with_kind(ElementKind::Dependency);
 
         // Extract name if present
@@ -568,9 +705,21 @@ impl<'a> Converter<'a> {
             element.name = Some(name);
         }
 
-        // Set owner if we have one
-        if let Some(owner_id) = self.owner_stack.last() {
-            element.owner = Some(owner_id.clone());
+        // Extract FROM/TO endpoints
+        let (sources, targets) = self.extract_dependency_endpoints(&pair);
+
+        // Store unresolved sources and targets
+        if !sources.is_empty() {
+            element.set_prop(
+                "unresolved_sources",
+                Value::List(sources.into_iter().map(Value::String).collect()),
+            );
+        }
+        if !targets.is_empty() {
+            element.set_prop(
+                "unresolved_targets",
+                Value::List(targets.into_iter().map(Value::String).collect()),
+            );
         }
 
         // Add span
@@ -578,10 +727,10 @@ impl<'a> Converter<'a> {
             element.spans.push(s);
         }
 
-        let id = element.id.clone();
-        graph.add_element(element);
+        // Add element with canonical ownership
+        self.add_with_ownership(element, graph);
 
-        Ok(Some(id))
+        Ok(())
     }
 
     /// Extract a name from a pair (looking for Identification/RegularName).
@@ -672,6 +821,159 @@ impl<'a> Converter<'a> {
             col as u32,
         ))
     }
+
+    // =========================================================================
+    // Relationship Extraction Helpers
+    // =========================================================================
+    // NOTE: Legacy multiplicity, direction, flags, and feature specialization
+    // extraction functions have been removed. These are now handled by single-pass
+    // extraction in extraction.rs, providing ~68% faster parsing for large models.
+
+    /// Extract dependency FROM and TO endpoints.
+    ///
+    /// Grammar: Dependency = { ... ~ QualifiedName ~ ("," ~ QualifiedName)* ~ KW_TO ~ QualifiedName ~ ("," ~ QualifiedName)* ~ ... }
+    ///
+    /// Returns (sources, targets) where sources are FROM qualified names and targets are TO qualified names.
+    fn extract_dependency_endpoints(&self, pair: &Pair<'_, Rule>) -> (Vec<String>, Vec<String>) {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut seen_to_keyword = false;
+
+        for inner in pair.clone().into_inner() {
+            match inner.as_rule() {
+                Rule::KW_TO => {
+                    seen_to_keyword = true;
+                }
+                Rule::QualifiedName => {
+                    let name = inner.as_str().trim().to_string();
+                    if !name.is_empty() {
+                        if seen_to_keyword {
+                            targets.push(name);
+                        } else {
+                            sources.push(name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (sources, targets)
+    }
+
+    // =========================================================================
+    // Relationship Creation Methods
+    // =========================================================================
+
+    /// Create a Specialization element linking a specific type to its general type.
+    ///
+    /// The relationship is owned by the specific type.
+    fn create_specialization(
+        &self,
+        specific_id: ElementId,
+        general_qname: String,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+    ) -> ElementId {
+        let mut element = Element::new_with_kind(ElementKind::Specialization);
+        element.set_prop("specific", Value::Ref(specific_id.clone()));
+        element.set_prop("unresolved_general", Value::String(general_qname));
+
+        if let Some(s) = span {
+            element.spans.push(s);
+        }
+
+        // Owned by the specific type
+        graph.add_owned_element(element, specific_id, VisibilityKind::Public)
+    }
+
+    /// Create a FeatureTyping element linking a typed feature to its type.
+    ///
+    /// The relationship is owned by the typed feature.
+    fn create_feature_typing(
+        &self,
+        typed_feature_id: ElementId,
+        type_qname: String,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+    ) -> ElementId {
+        let mut element = Element::new_with_kind(ElementKind::FeatureTyping);
+        element.set_prop("typedFeature", Value::Ref(typed_feature_id.clone()));
+        element.set_prop("unresolved_type", Value::String(type_qname));
+
+        if let Some(s) = span {
+            element.spans.push(s);
+        }
+
+        // Owned by the typed feature
+        graph.add_owned_element(element, typed_feature_id, VisibilityKind::Public)
+    }
+
+    /// Create a Subsetting element linking a subsetting feature to its subsetted feature.
+    ///
+    /// The relationship is owned by the subsetting feature.
+    fn create_subsetting(
+        &self,
+        subsetting_feature_id: ElementId,
+        subsetted_qname: String,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+    ) -> ElementId {
+        let mut element = Element::new_with_kind(ElementKind::Subsetting);
+        element.set_prop("subsettingFeature", Value::Ref(subsetting_feature_id.clone()));
+        element.set_prop("unresolved_subsettedFeature", Value::String(subsetted_qname));
+
+        if let Some(s) = span {
+            element.spans.push(s);
+        }
+
+        // Owned by the subsetting feature
+        graph.add_owned_element(element, subsetting_feature_id, VisibilityKind::Public)
+    }
+
+    /// Create a Redefinition element linking a redefining feature to its redefined feature.
+    ///
+    /// The relationship is owned by the redefining feature.
+    fn create_redefinition(
+        &self,
+        redefining_feature_id: ElementId,
+        redefined_qname: String,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+    ) -> ElementId {
+        let mut element = Element::new_with_kind(ElementKind::Redefinition);
+        element.set_prop("redefiningFeature", Value::Ref(redefining_feature_id.clone()));
+        element.set_prop("unresolved_redefinedFeature", Value::String(redefined_qname));
+
+        if let Some(s) = span {
+            element.spans.push(s);
+        }
+
+        // Owned by the redefining feature
+        graph.add_owned_element(element, redefining_feature_id, VisibilityKind::Public)
+    }
+
+    /// Create a ReferenceSubsetting element linking a referencing feature to its referenced feature.
+    ///
+    /// The relationship is owned by the referencing feature.
+    fn create_reference_subsetting(
+        &self,
+        referencing_feature_id: ElementId,
+        referenced_qname: String,
+        graph: &mut ModelGraph,
+        span: Option<Span>,
+    ) -> ElementId {
+        let mut element = Element::new_with_kind(ElementKind::ReferenceSubsetting);
+        element.set_prop("referencingFeature", Value::Ref(referencing_feature_id.clone()));
+        element.set_prop("unresolved_referencedFeature", Value::String(referenced_qname));
+
+        if let Some(s) = span {
+            element.spans.push(s);
+        }
+
+        // Owned by the referencing feature
+        graph.add_owned_element(element, referencing_feature_id, VisibilityKind::Public)
+    }
 }
 
 /// Check if a rule is a keyword (to skip).
@@ -738,7 +1040,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_EXPOSE
             | Rule::KW_EXPR
             | Rule::KW_FALSE
-            | Rule::KW_FEATURE
             | Rule::KW_FEATURED
             | Rule::KW_FEATURING
             | Rule::KW_FILTER
@@ -748,7 +1049,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_FORK
             | Rule::KW_FRAME
             | Rule::KW_FROM
-            | Rule::KW_FUNCTION
             | Rule::KW_HASTYPE
             | Rule::KW_IF
             | Rule::KW_IMPLIES
@@ -757,7 +1057,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_INCLUDE
             | Rule::KW_INDIVIDUAL
             | Rule::KW_INOUT
-            | Rule::KW_INTERACTION
             | Rule::KW_INTERFACE
             | Rule::KW_INTERSECTS
             | Rule::KW_INV
@@ -774,7 +1073,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_MERGE
             | Rule::KW_MESSAGE
             | Rule::KW_META
-            | Rule::KW_METACLASS
             | Rule::KW_METADATA
             | Rule::KW_MULTIPLICITY
             | Rule::KW_NAMESPACE
@@ -793,7 +1091,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_PERFORM
             | Rule::KW_PORT
             | Rule::KW_PORTION
-            | Rule::KW_PREDICATE
             | Rule::KW_PRIVATE
             | Rule::KW_PROTECTED
             | Rule::KW_PUBLIC
@@ -830,7 +1127,6 @@ fn rule_is_keyword(rule: Rule) -> bool {
             | Rule::KW_TO
             | Rule::KW_TRANSITION
             | Rule::KW_TRUE
-            | Rule::KW_TYPE
             | Rule::KW_TYPED
             | Rule::KW_TYPING
             | Rule::KW_UNIONS

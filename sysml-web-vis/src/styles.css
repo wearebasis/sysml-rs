@@ -1,0 +1,177 @@
+:root {
+    --sysml-bg: #f7f3ee;
+    --sysml-grid: rgba(0, 0, 0, 0.06);
+    --sysml-node-fill: #fefaf4;
+    --sysml-node-stroke: #5e554b;
+    --sysml-link-stroke: #6c6c6c;
+    --sysml-flow: #c3442d;
+    --sysml-transition: #5f4a36;
+    --sysml-action: #c4562a;
+    --sysml-action-accent: #f5d2bf;
+    --sysml-lane-fill: #fef7ef;
+    --sysml-lane-stroke: #bfa895;
+    --sysml-param-fill: #fff4e8;
+    --sysml-trigger-fill: #fdf3cf;
+    --sysml-req-fill: #ffe5ee;
+    --sysml-req-stroke: #b45a74;
+    --sysml-package-fill: #e7f1e4;
+    --sysml-package-stroke: #6f8b65;
+    --sysml-view-fill: #eaf1fb;
+    --sysml-view-stroke: #6a7fa4;
+    --sysml-constraint-fill: #fff5d8;
+    --sysml-constraint-stroke: #c4a467;
+    --sysml-state-fill: #f2f4f6;
+    --sysml-state-stroke: #6f7a85;
+    --sysml-connection-fill: #f6f0e8;
+    --sysml-connection-stroke: #9b8a76;
+    --sysml-interface-fill: #eef2f7;
+    --sysml-interface-stroke: #7489a8;
+    --sysml-port-in: var(--sysml-link-typing);
+    --sysml-port-out: var(--sysml-flow);
+    --sysml-port-inout: var(--sysml-link-stroke);
+    --sysml-metaclass-stroke: #3f3a34;
+    --sysml-grid-header: #f0ebe4;
+    --sysml-grid-fill: #fffaf4;
+    --sysml-grid-stroke: #c6b7a6;
+    --sysml-grid-group: #e6ded4;
+    --sysml-browser-icon: #6b5b4d;
+    --sysml-link-ownership: #7c7368;
+    --sysml-link-typing: #5b6e91;
+    --sysml-link-specialization: #8b6b5a;
+    --sysml-link-req: #b45a74;
+    --sysml-link-verify: #8b5d85;
+    --sysml-link-derive: #c0784d;
+    --sysml-link-allocate: #6a7fa4;
+    --sysml-link-view: #6a7fa4;
+    --sysml-sequence: #566f8f;
+    --sysml-sequence-fill: #eef3f9;
+    --sysml-geometry-fill: #f6f1ea;
+    --sysml-geometry-stroke: #5f564c;
+    --sysml-geometry-link: #5a6f86;
+    --sysml-browser: #e7f1e4;
+    --sysml-panel: rgba(255, 252, 248, 0.9);
+    --sysml-panel-border: rgba(94, 85, 75, 0.35);
+    --sysml-panel-shadow: 0 8px 24px rgba(36, 30, 25, 0.12);
+    --sysml-text: #2d2824;
+    --sysml-muted: #6b5b4d;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: var(--sysml-bg);
+    color: var(--sysml-text);
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    overflow: auto;
+}
+
+.control-panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--sysml-panel);
+    border: 1px solid var(--sysml-panel-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: var(--sysml-panel-shadow);
+    z-index: 10;
+}
+
+.control-panel label {
+    font-size: 12px;
+    color: var(--sysml-muted);
+}
+
+.control-panel select {
+    font-size: 13px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(94, 85, 75, 0.4);
+    background: white;
+    color: var(--sysml-text);
+}
+
+.control-panel .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--sysml-muted);
+}
+
+.control-panel .checkbox input {
+    margin: 0;
+    accent-color: #8c7f6a;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.control-panel button {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(94, 85, 75, 0.4);
+    background: #fffdfa;
+    color: var(--sysml-text);
+    cursor: pointer;
+}
+
+.control-panel button:hover {
+    background: #f4eee6;
+}
+
+.diagram-header {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    min-width: 220px;
+    max-width: 320px;
+    padding: 12px 16px;
+    background: var(--sysml-panel);
+    border: 1px solid var(--sysml-panel-border);
+    border-radius: 12px;
+    box-shadow: var(--sysml-panel-shadow);
+    z-index: 10;
+}
+
+.diagram-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--sysml-text);
+}
+
+.diagram-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--sysml-muted);
+}
+
+.diagram-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--sysml-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.diagram-meta span {
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(94, 85, 75, 0.08);
+}

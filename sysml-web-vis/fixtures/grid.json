@@ -1,0 +1,197 @@
+{
+  "version": "0.2",
+  "view": "GridView",
+  "viewMetadata": {
+    "title": "Grid View",
+    "subtitle": "Allocation + Attribute Matrix",
+    "subject": "VehicleProject",
+    "compartmentMode": "textual"
+  },
+  "grid": {
+    "rows": [
+      {
+        "id": "req-safety",
+        "label": "SafetyReq",
+        "elementId": "req-safety",
+        "group": "Requirements"
+      },
+      {
+        "id": "req-perf",
+        "label": "PerfReq",
+        "elementId": "req-perf",
+        "group": "Requirements"
+      },
+      {
+        "id": "req-thermal",
+        "label": "ThermalReq",
+        "elementId": "req-thermal",
+        "group": "Requirements"
+      },
+      {
+        "id": "attr-mass",
+        "label": "mass",
+        "elementId": "attr-mass",
+        "group": "Attributes"
+      },
+      {
+        "id": "attr-temp",
+        "label": "temperature",
+        "elementId": "attr-temp",
+        "group": "Attributes"
+      }
+    ],
+    "columns": [
+      {
+        "id": "part-vehicle",
+        "label": "Vehicle",
+        "elementId": "part-vehicle",
+        "group": "Parts"
+      },
+      {
+        "id": "part-engine",
+        "label": "Engine",
+        "elementId": "part-engine",
+        "group": "Parts"
+      },
+      {
+        "id": "part-sensor",
+        "label": "Sensor",
+        "elementId": "part-sensor",
+        "group": "Parts"
+      }
+    ],
+    "cells": [
+      {
+        "rowId": "req-safety",
+        "columnId": "part-vehicle",
+        "linkId": "link-satisfy-vehicle-safety"
+      },
+      {
+        "rowId": "req-perf",
+        "columnId": "part-engine",
+        "linkId": "link-satisfy-engine-perf"
+      },
+      {
+        "rowId": "req-thermal",
+        "columnId": "part-engine",
+        "linkId": "link-verify-engine-thermal"
+      },
+      {
+        "rowId": "req-safety",
+        "columnId": "part-sensor",
+        "linkId": "link-allocate-sensor-safety"
+      },
+      {
+        "rowId": "req-safety",
+        "columnId": "part-engine",
+        "linkIds": ["link-satisfy-engine-safety", "link-verify-engine-safety"]
+      },
+      {
+        "rowId": "attr-mass",
+        "columnId": "part-vehicle",
+        "value": "1200 kg"
+      },
+      {
+        "rowId": "attr-mass",
+        "columnId": "part-engine",
+        "value": "220 kg"
+      },
+      {
+        "rowId": "attr-temp",
+        "columnId": "part-engine",
+        "value": "95 C"
+      },
+      {
+        "rowId": "attr-temp",
+        "columnId": "part-sensor",
+        "value": "55 C"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "part-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "icon": "PART"
+    },
+    {
+      "id": "part-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "icon": "PART"
+    },
+    {
+      "id": "part-sensor",
+      "kind": "PartDefinition",
+      "name": "Sensor",
+      "icon": "PART"
+    },
+    {
+      "id": "req-safety",
+      "kind": "RequirementDefinition",
+      "name": "SafetyReq",
+      "icon": "REQ"
+    },
+    {
+      "id": "req-perf",
+      "kind": "RequirementDefinition",
+      "name": "PerfReq",
+      "icon": "REQ"
+    },
+    {
+      "id": "req-thermal",
+      "kind": "RequirementDefinition",
+      "name": "ThermalReq",
+      "icon": "REQ"
+    },
+    {
+      "id": "attr-mass",
+      "kind": "AttributeDefinition",
+      "name": "mass"
+    },
+    {
+      "id": "attr-temp",
+      "kind": "AttributeDefinition",
+      "name": "temperature"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-satisfy-engine-safety",
+      "kind": "Satisfy",
+      "source": { "nodeId": "part-engine" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "link-verify-engine-safety",
+      "kind": "Verify",
+      "source": { "nodeId": "part-engine" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "link-satisfy-vehicle-safety",
+      "kind": "Satisfy",
+      "source": { "nodeId": "part-vehicle" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "link-satisfy-engine-perf",
+      "kind": "Satisfy",
+      "source": { "nodeId": "part-engine" },
+      "target": { "nodeId": "req-perf" }
+    },
+    {
+      "id": "link-verify-engine-thermal",
+      "kind": "Verify",
+      "source": { "nodeId": "part-engine" },
+      "target": { "nodeId": "req-thermal" }
+    },
+    {
+      "id": "link-allocate-sensor-safety",
+      "kind": "Allocate",
+      "source": { "nodeId": "part-sensor" },
+      "target": { "nodeId": "req-safety" }
+    }
+  ]
+}

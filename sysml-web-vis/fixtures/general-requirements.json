@@ -1,0 +1,110 @@
+{
+  "version": "0.2",
+  "view": "GeneralView",
+  "viewMetadata": {
+    "title": "Requirement Diagram",
+    "subtitle": "Vehicle Safety",
+    "subject": "Vehicle",
+    "compartmentMode": "textual"
+  },
+  "nodes": [
+    {
+      "id": "req-safety",
+      "kind": "RequirementDefinition",
+      "name": "SafetyReq",
+      "icon": "REQ",
+      "position": { "x": 420, "y": 120 },
+      "compartments": [
+        {
+          "id": "req-text",
+          "title": "text",
+          "kind": "text",
+          "lines": ["id: SR-1", "text: Maintain safe operation during faults."]
+        }
+      ]
+    },
+    {
+      "id": "req-perf",
+      "kind": "RequirementDefinition",
+      "name": "PerfReq",
+      "icon": "REQ",
+      "position": { "x": 420, "y": 260 },
+      "compartments": [
+        {
+          "id": "req-text",
+          "title": "text",
+          "kind": "text",
+          "lines": ["id: PR-2", "text: Deliver rated performance."]
+        }
+      ]
+    },
+    {
+      "id": "req-thermal",
+      "kind": "RequirementDefinition",
+      "name": "ThermalReq",
+      "icon": "REQ",
+      "position": { "x": 420, "y": 400 },
+      "compartments": [
+        {
+          "id": "req-text",
+          "title": "text",
+          "kind": "text",
+          "lines": ["id: TR-3", "text: Limit component temperature to 95 C."]
+        }
+      ]
+    },
+    {
+      "id": "block-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "icon": "PART",
+      "position": { "x": 60, "y": 160 }
+    },
+    {
+      "id": "block-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "icon": "PART",
+      "position": { "x": 60, "y": 300 }
+    },
+    {
+      "id": "test-rig",
+      "kind": "PartDefinition",
+      "name": "TestRig",
+      "icon": "PART",
+      "position": { "x": 60, "y": 440 }
+    }
+  ],
+  "links": [
+    {
+      "id": "satisfy-safety",
+      "kind": "Satisfy",
+      "source": { "nodeId": "block-vehicle" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "verify-perf",
+      "kind": "Verify",
+      "source": { "nodeId": "test-rig" },
+      "target": { "nodeId": "req-perf" }
+    },
+    {
+      "id": "derive-perf-safety",
+      "kind": "Derive",
+      "source": { "nodeId": "req-perf" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "refine-thermal-safety",
+      "kind": "Refine",
+      "source": { "nodeId": "req-thermal" },
+      "target": { "nodeId": "req-safety" }
+    },
+    {
+      "id": "allocate-engine-thermal",
+      "kind": "Allocate",
+      "source": { "nodeId": "block-engine" },
+      "target": { "nodeId": "req-thermal" }
+    }
+  ]
+}

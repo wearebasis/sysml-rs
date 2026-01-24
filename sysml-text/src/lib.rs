@@ -5,7 +5,25 @@
 //! This crate defines the interface for parsing SysML v2 textual notation.
 //! Actual parsing implementations are provided by sidecar crates that
 //! wrap external parsers (Pilot, MontiCore, SySide).
+//!
+//! ## Standard Library Loading
+//!
+//! For full name resolution, you can load the standard library:
+//!
+//! ```ignore
+//! use sysml_text::library::{load_standard_library, LibraryConfig};
+//!
+//! // Load library from environment variable SYSML_LIBRARY_PATH
+//! let config = LibraryConfig::from_env()?;
+//! let library = load_standard_library(&parser, &config)?;
+//!
+//! // Parse and resolve with library
+//! let result = parser.parse(&files).into_resolved_with_library(library);
+//! ```
 
+pub mod library;
+
+use sysml_core::resolution::{resolve_references, ResolutionResult};
 use sysml_core::ModelGraph;
 use sysml_span::Diagnostic;
 
@@ -72,6 +90,93 @@ impl ParseResult {
     /// Get the number of errors.
     pub fn error_count(&self) -> usize {
         self.diagnostics.iter().filter(|d| d.is_error()).count()
+    }
+
+    /// Resolve all unresolved references in the parsed model.
+    ///
+    /// This converts `unresolved_*` string properties to resolved `ElementId`
+    /// references. Any references that cannot be resolved are added to diagnostics.
+    ///
+    /// Returns `self` for method chaining.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let result = parser.parse(&files).into_resolved();
+    /// assert!(result.is_ok()); // Both parse AND resolution succeeded
+    /// ```
+    pub fn into_resolved(mut self) -> Self {
+        let res = resolve_references(&mut self.graph);
+
+        // Merge resolution diagnostics into parse diagnostics
+        for diag in res.diagnostics.iter() {
+            self.diagnostics.push(diag.clone());
+        }
+
+        self
+    }
+
+    /// Resolve references and return the detailed resolution result.
+    ///
+    /// Use this when you need access to resolution statistics
+    /// (resolved_count, unresolved_count).
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let mut result = parser.parse(&files);
+    /// let res = result.resolve();
+    /// println!("Resolved {} references", res.resolved_count);
+    /// ```
+    pub fn resolve(&mut self) -> ResolutionResult {
+        resolve_references(&mut self.graph)
+    }
+
+    /// Resolve references with a pre-loaded standard library.
+    ///
+    /// This merges the library graph into the parsed graph before resolution,
+    /// enabling resolution of standard library types like `Anything`, `Real`,
+    /// `Item`, etc.
+    ///
+    /// # Arguments
+    ///
+    /// * `library` - A ModelGraph containing the standard library elements,
+    ///   typically created via `load_standard_library()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use sysml_text::library::{load_standard_library, LibraryConfig};
+    ///
+    /// let config = LibraryConfig::from_env()?;
+    /// let library = load_standard_library(&parser, &config)?;
+    ///
+    /// let result = parser.parse(&files).into_resolved_with_library(library);
+    /// assert!(result.is_ok()); // Standard library types now resolve
+    /// ```
+    pub fn into_resolved_with_library(mut self, library: ModelGraph) -> Self {
+        // Merge library into our graph (as_library=true registers root packages)
+        self.graph.merge(library, true);
+
+        // Rebuild indexes after merge
+        self.graph.rebuild_indexes();
+
+        // Now resolve
+        self.into_resolved()
+    }
+
+    /// Resolve references with library and return detailed statistics.
+    ///
+    /// Like `into_resolved_with_library`, but returns the `ResolutionResult`
+    /// with statistics instead of consuming self.
+    pub fn resolve_with_library(&mut self, library: ModelGraph) -> ResolutionResult {
+        // Merge library into our graph
+        self.graph.merge(library, true);
+
+        // Rebuild indexes after merge
+        self.graph.rebuild_indexes();
+
+        // Now resolve
+        resolve_references(&mut self.graph)
     }
 }
 

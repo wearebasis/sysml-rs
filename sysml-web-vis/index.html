@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>sysml-web-vis</title>
+    </head>
+    <body>
+        <div class="control-panel">
+            <label for="viewSelect">View</label>
+            <select id="viewSelect"></select>
+            <label for="layoutSelect">Layout</label>
+            <select id="layoutSelect"></select>
+            <label class="checkbox">
+                <input type="checkbox" id="layoutAllToggle" />
+                Apply layout to all nodes
+            </label>
+            <label for="routerSelect">Router</label>
+            <select id="routerSelect"></select>
+            <div class="export-buttons">
+                <button id="exportSvg" type="button">Export SVG</button>
+                <button id="exportPng" type="button">Export PNG</button>
+            </div>
+        </div>
+        <div class="diagram-header" id="diagramHeader">
+            <div class="diagram-title" id="diagramTitle"></div>
+            <div class="diagram-subtitle" id="diagramSubtitle"></div>
+            <div class="diagram-meta" id="diagramMeta"></div>
+        </div>
+        <div id="app"></div>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>

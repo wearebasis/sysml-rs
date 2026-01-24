@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wearebasis.dev/sysml/vis-spec.schema.json",
+  "title": "SysML VisSpec",
+  "type": "object",
+  "required": ["version", "view", "nodes", "links"],
+  "properties": {
+    "version": { "const": "0.2" },
+    "view": {
+      "enum": [
+        "GeneralView",
+        "InterconnectionView",
+        "StateTransitionView",
+        "ActionFlowView",
+        "SequenceView",
+        "BrowserView",
+        "GridView",
+        "GeometryView"
+      ]
+    },
+    "viewMetadata": { "$ref": "#/$defs/viewMetadata" },
+    "geometry": { "$ref": "#/$defs/geometry" },
+    "grid": { "$ref": "#/$defs/grid" },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+    "links": { "type": "array", "items": { "$ref": "#/$defs/link" } }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string" },
+        "icon": { "type": "string" },
+        "name": { "type": "string" },
+        "label": { "type": "string" },
+        "parentId": { "type": "string" },
+        "stereotype": { "type": "string" },
+        "metaclass": { "type": "string" },
+        "metadata": { "type": "string" },
+        "collapsed": { "type": "boolean" },
+        "geometry": { "$ref": "#/$defs/nodeGeometry" },
+        "position": { "$ref": "#/$defs/point" },
+        "size": { "$ref": "#/$defs/size" },
+        "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+        "compartments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/compartment" }
+        },
+        "style": { "$ref": "#/$defs/style" }
+      }
+    },
+    "port": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "group": { "type": "string" },
+        "kind": { "type": "string" },
+        "direction": { "enum": ["in", "out", "inout"] },
+        "side": { "enum": ["left", "right", "top", "bottom"] },
+        "offset": { "type": "number" },
+        "symbol": { "enum": ["square", "circle", "lollipop"] },
+        "typedBy": { "type": "string" },
+        "multiplicity": { "type": "string" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["id", "kind", "source", "target"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string" },
+        "source": { "$ref": "#/$defs/endpoint" },
+        "target": { "$ref": "#/$defs/endpoint" },
+        "connectionRole": {
+          "enum": ["connection", "interface", "flow", "binding", "delegation"]
+        },
+        "lineStyle": { "enum": ["solid", "dashed"] },
+        "markerStart": { "enum": ["none", "triangle", "diamond", "open"] },
+        "markerEnd": { "enum": ["none", "triangle", "diamond", "open"] },
+        "flowItem": { "$ref": "#/$defs/flowItem" },
+        "elaboration": { "$ref": "#/$defs/elaboration" },
+        "transition": { "$ref": "#/$defs/transition" },
+        "geometry": { "$ref": "#/$defs/linkGeometry" },
+        "labels": { "type": "array", "items": { "$ref": "#/$defs/label" } },
+        "style": { "$ref": "#/$defs/style" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["nodeId"],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "portId": { "type": "string" }
+      }
+    },
+    "label": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "position": { "type": "number" }
+      }
+    },
+    "compartment": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "kind": { "enum": ["text", "graphical"] },
+        "lines": { "type": "array", "items": { "type": "string" } },
+        "nodeIds": { "type": "array", "items": { "type": "string" } },
+        "style": { "$ref": "#/$defs/style" }
+      }
+    },
+    "flowItem": {
+      "type": "object",
+      "properties": {
+        "itemTypeId": { "type": "string" },
+        "itemLabel": { "type": "string" },
+        "direction": {
+          "enum": ["sourceToTarget", "targetToSource", "bidirectional"]
+        },
+        "multiplicity": { "type": "string" }
+      }
+    },
+    "elaboration": {
+      "type": "object",
+      "required": ["nodeId"],
+      "properties": {
+        "nodeId": { "type": "string" },
+        "attach": { "enum": ["edge", "source", "target"] },
+        "position": { "type": "number" },
+        "label": { "type": "string" }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "properties": {
+        "trigger": { "type": "string" },
+        "guard": { "type": "string" },
+        "effect": { "type": "string" }
+      }
+    },
+    "viewMetadata": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "description": { "type": "string" },
+        "viewpoint": { "type": "string" },
+        "subject": { "type": "string" },
+        "filterKinds": { "type": "array", "items": { "type": "string" } },
+        "sortBy": { "enum": ["name", "kind"] },
+        "sortOrder": { "enum": ["asc", "desc"] },
+        "compartmentMode": {
+          "enum": ["textual", "graphical", "mixed"]
+        }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "required": ["rows", "columns", "cells"],
+      "properties": {
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/gridAxis" } },
+        "columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gridAxis" }
+        },
+        "cells": { "type": "array", "items": { "$ref": "#/$defs/gridCell" } }
+      }
+    },
+    "gridAxis": {
+      "type": "object",
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "elementId": { "type": "string" }
+      }
+    },
+    "gridCell": {
+      "type": "object",
+      "required": ["rowId", "columnId"],
+      "properties": {
+        "rowId": { "type": "string" },
+        "columnId": { "type": "string" },
+        "value": { "type": "string" },
+        "linkId": { "type": "string" },
+        "style": { "$ref": "#/$defs/style" }
+      }
+    },
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "size": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number" },
+        "height": { "type": "number" }
+      }
+    },
+    "spatialPoint": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "spatialSize": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "depth": { "type": "number" }
+      }
+    },
+    "rotation": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "style": {
+      "type": "object",
+      "properties": {
+        "fill": { "type": "string" },
+        "stroke": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    }
+  }
+}
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "frame": { "enum": ["2d", "3d"] },
+        "units": { "type": "string" },
+        "origin": { "$ref": "#/$defs/spatialPoint" },
+        "scale": { "type": "number" }
+      }
+    },
+    "nodeGeometry": {
+      "type": "object",
+      "properties": {
+        "position": { "$ref": "#/$defs/spatialPoint" },
+        "size": { "$ref": "#/$defs/spatialSize" },
+        "rotation": { "$ref": "#/$defs/rotation" }
+      }
+    },
+    "linkGeometry": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/spatialPoint" }
+        },
+        "style": { "enum": ["solid", "dashed"] }
+      }
+    },

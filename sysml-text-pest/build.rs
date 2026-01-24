@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use sysml_codegen::{
     extract_all_keyword_strings, generate_pest_enums, generate_pest_keywords_from_strings,
-    generate_pest_operators, parse_xtext_enums, parse_xtext_operators,
+    generate_pest_operators, parse_xtext_enums, parse_xtext_operators, validate_keyword_coverage,
 };
 
 /// Paths to xtext specification files relative to the references directory.
@@ -158,6 +158,29 @@ fn main() {
     if should_write {
         fs::write(&dest_path, &grammar).expect("Failed to write generated grammar");
         println!("cargo:warning=Generated grammar at: {}", dest_path.display());
+    }
+
+    // Validate keyword coverage against grammar rules
+    let validation = validate_keyword_coverage(&keywords, &grammar);
+
+    if !validation.missing_usage_rules.is_empty() {
+        for rule in &validation.missing_usage_rules {
+            println!("cargo:warning=Missing usage rule: {}", rule);
+        }
+    }
+
+    if !validation.missing_definition_rules.is_empty() {
+        for rule in &validation.missing_definition_rules {
+            println!("cargo:warning=Missing definition rule: {}", rule);
+        }
+    }
+
+    // Optionally fail the build if SYSML_STRICT_VALIDATION is set
+    if env::var("SYSML_STRICT_VALIDATION").is_ok() && !validation.is_valid() {
+        panic!(
+            "Keyword-to-grammar validation failed!\n{}",
+            validation.format_report()
+        );
     }
 
     // Also write to OUT_DIR for debugging/inspection

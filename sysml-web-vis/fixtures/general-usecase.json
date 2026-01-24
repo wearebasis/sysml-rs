@@ -1,0 +1,94 @@
+{
+  "version": "0.2",
+  "view": "GeneralView",
+  "viewMetadata": {
+    "title": "Use Case Diagram",
+    "subtitle": "Vehicle UI",
+    "subject": "UI",
+    "compartmentMode": "textual"
+  },
+  "nodes": [
+    {
+      "id": "actor-user",
+      "kind": "Actor",
+      "name": "User",
+      "icon": "ACTOR",
+      "position": { "x": 60, "y": 140 }
+    },
+    {
+      "id": "actor-admin",
+      "kind": "Actor",
+      "name": "Admin",
+      "icon": "ACTOR",
+      "position": { "x": 740, "y": 140 }
+    },
+    {
+      "id": "usecase-select",
+      "kind": "UseCase",
+      "name": "Select Page",
+      "icon": "UC",
+      "position": { "x": 260, "y": 80 }
+    },
+    {
+      "id": "usecase-render",
+      "kind": "UseCase",
+      "name": "Render Page",
+      "icon": "UC",
+      "position": { "x": 500, "y": 80 }
+    },
+    {
+      "id": "usecase-validate",
+      "kind": "UseCase",
+      "name": "Validate Inputs",
+      "icon": "UC",
+      "position": { "x": 260, "y": 220 }
+    },
+    {
+      "id": "usecase-manage",
+      "kind": "UseCase",
+      "name": "Manage Settings",
+      "icon": "UC",
+      "position": { "x": 500, "y": 220 }
+    }
+  ],
+  "links": [
+    {
+      "id": "assoc-user-select",
+      "kind": "Association",
+      "source": { "nodeId": "actor-user" },
+      "target": { "nodeId": "usecase-select" }
+    },
+    {
+      "id": "assoc-user-validate",
+      "kind": "Association",
+      "source": { "nodeId": "actor-user" },
+      "target": { "nodeId": "usecase-validate" }
+    },
+    {
+      "id": "assoc-admin-manage",
+      "kind": "Association",
+      "source": { "nodeId": "actor-admin" },
+      "target": { "nodeId": "usecase-manage" }
+    },
+    {
+      "id": "assoc-admin-render",
+      "kind": "Association",
+      "source": { "nodeId": "actor-admin" },
+      "target": { "nodeId": "usecase-render" }
+    },
+    {
+      "id": "include-select-render",
+      "kind": "Include",
+      "source": { "nodeId": "usecase-select" },
+      "target": { "nodeId": "usecase-render" },
+      "labels": [{ "text": "<<include>>" }]
+    },
+    {
+      "id": "extend-validate-select",
+      "kind": "Extend",
+      "source": { "nodeId": "usecase-validate" },
+      "target": { "nodeId": "usecase-select" },
+      "labels": [{ "text": "<<extend>>" }]
+    }
+  ]
+}

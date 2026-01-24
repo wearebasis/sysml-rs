@@ -8,3 +8,5 @@ description = "Parser trait and result types for SysML v2 text parsing"
 [dependencies]
 sysml-core = { workspace = true }
 sysml-span = { workspace = true }
+walkdir = { workspace = true }
+thiserror = { workspace = true }

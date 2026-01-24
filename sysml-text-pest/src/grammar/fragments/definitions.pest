@@ -30,6 +30,21 @@ DefinitionElement = {
     | ViewpointDefinition
     | RenderingDefinition
     | ExtendedDefinition
+    // KerML types (needed for standard library parsing)
+    | ClassifierDefinition
+    | DatatypeDefinition
+    | ClassDefinition
+    | StructDefinition
+    | AssociationDefinition
+    | AssociationStructDefinition
+    | MultiplicityDefinition
+    | FeatureDefinition
+    // KerML behavior/function types (for standard library parsing)
+    | BehaviorDefinition
+    | FunctionDefinition
+    | PredicateDefinition
+    | InteractionDefinition
+    | MetaclassDefinition
 }
 
 DefinitionPrefix = { BasicDefinitionPrefix? ~ DefinitionExtensionKeyword* }
@@ -370,4 +385,84 @@ RenderingDefinition = {
 
 ExtendedDefinition = {
     BasicDefinitionPrefix? ~ DefinitionExtensionKeyword+ ~ KW_DEF ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// =============================================================================
+// KERML TYPES (for standard library parsing)
+// =============================================================================
+
+// KerML Classifier: [abstract] classifier Name [:> Parent] { ... } | ;
+ClassifierDefinition = {
+    DefinitionPrefix ~ KW_CLASSIFIER ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML DataType: [abstract] datatype Name [:> Parent] { ... } | ;
+DatatypeDefinition = {
+    DefinitionPrefix ~ KW_DATATYPE ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Class: [abstract] class Name [:> Parent] { ... } | ;
+ClassDefinition = {
+    DefinitionPrefix ~ KW_CLASS ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Structure: [abstract] struct Name [:> Parent] { ... } | ;
+StructDefinition = {
+    DefinitionPrefix ~ KW_STRUCT ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Association: [abstract] assoc Name [:> Parent] { ... } | ;
+AssociationDefinition = {
+    DefinitionPrefix ~ KW_ASSOC ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML AssociationStructure: [abstract] assoc struct Name [:> Parent] { ... } | ;
+AssociationStructDefinition = {
+    DefinitionPrefix ~ KW_ASSOC ~ KW_STRUCT ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Multiplicity: multiplicity Name [bounds] { ... } | ;
+MultiplicityDefinition = {
+    KW_MULTIPLICITY ~ Identification? ~ OwnedMultiplicity? ~ DefinitionBody
+}
+
+// KerML Feature: [modifiers] feature [name] [:> Parent] [= value] { ... } | ;
+// Uses RefPrefix to support all KerML feature modifiers (var, composite, portion, const, derived)
+// Per KerML.xtext: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration? | ...)
+FeatureDefinition = {
+    RefPrefix ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+}
+
+// KerML Behavior: [abstract] behavior Name [:> Parent] { ... } | ;
+BehaviorDefinition = {
+    DefinitionPrefix ~ KW_BEHAVIOR ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Function: [abstract] function Name [:> Parent] { ... } | ;
+// Uses FunctionBody which supports return and result expression
+FunctionDefinition = {
+    DefinitionPrefix ~ KW_FUNCTION ~ DefinitionDeclaration ~ FunctionBody
+}
+
+// KerML Predicate: [abstract] predicate Name [:> Parent] { ... } | ;
+PredicateDefinition = {
+    DefinitionPrefix ~ KW_PREDICATE ~ DefinitionDeclaration ~ FunctionBody
+}
+
+// KerML Interaction: [abstract] interaction Name [:> Parent] { ... } | ;
+InteractionDefinition = {
+    DefinitionPrefix ~ KW_INTERACTION ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Metaclass: [abstract] metaclass Name [:> Parent] { ... } | ;
+MetaclassDefinition = {
+    DefinitionPrefix ~ KW_METACLASS ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// FunctionBody: Function and predicate body with return and result expression
+FunctionBody = { ";" | "{" ~ FunctionBodyItem* ~ ResultExpressionMember? ~ "}" }
+
+FunctionBodyItem = {
+    DefinitionBodyItem
+    | ReturnParameterMember
 }

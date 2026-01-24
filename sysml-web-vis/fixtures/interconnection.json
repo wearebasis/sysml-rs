@@ -1,0 +1,474 @@
+{
+  "version": "0.2",
+  "view": "InterconnectionView",
+  "viewMetadata": {
+    "title": "Interconnection View",
+    "subtitle": "VehicleSystem",
+    "subject": "VehicleSystem",
+    "compartmentMode": "mixed"
+  },
+  "nodes": [
+    {
+      "id": "system",
+      "kind": "PartDefinition",
+      "name": "VehicleSystem",
+      "icon": "PKG",
+      "stereotype": "<<part def>>",
+      "position": { "x": 40, "y": 40 },
+      "size": { "width": 940, "height": 540 },
+      "ports": [
+        {
+          "id": "system-data",
+          "name": "externalData",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.4,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "parts",
+          "title": "parts",
+          "kind": "text",
+          "lines": [
+            "sensor1 : Sensor",
+            "controller1 : Controller",
+            "bus1 : Bus",
+            "power1 : Power"
+          ]
+        },
+        {
+          "id": "structure",
+          "title": "structure",
+          "kind": "graphical",
+          "nodeIds": [
+            "part-usage-sensor",
+            "part-usage-controller",
+            "part-usage-bus",
+            "part-usage-power",
+            "connection-def-data"
+          ]
+        },
+        {
+          "id": "constraints",
+          "title": "constraints",
+          "kind": "graphical",
+          "nodeIds": ["constraint-thermal", "param-temp", "param-max"]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-sensor",
+      "kind": "PartUsage",
+      "name": "sensor1",
+      "label": "Sensor",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 90, "y": 140 },
+      "size": { "width": 200, "height": 140 },
+      "ports": [
+        {
+          "id": "sensor-data-out",
+          "name": "dataOut",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.5,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "sensor-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.7,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "sensor-threshold",
+          "name": "threshold",
+          "direction": "in",
+          "side": "top",
+          "offset": 0.3,
+          "symbol": "circle",
+          "typedBy": "ThresholdParam",
+          "multiplicity": "0..1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "ports",
+          "title": "ports",
+          "kind": "text",
+          "lines": [
+            "dataOut : DataPort",
+            "powerIn : PowerPort",
+            "threshold : ThresholdParam"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-controller",
+      "kind": "PartUsage",
+      "name": "controller1",
+      "label": "Controller",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 360, "y": 120 },
+      "size": { "width": 260, "height": 170 },
+      "ports": [
+        {
+          "id": "controller-sensor-in",
+          "name": "sensorIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.4,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "controller-bus-out",
+          "name": "busOut",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.35,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "controller-interface",
+          "name": "dataInterface",
+          "direction": "inout",
+          "side": "right",
+          "offset": 0.75,
+          "symbol": "lollipop",
+          "typedBy": "DataInterface",
+          "multiplicity": "1"
+        },
+        {
+          "id": "controller-threshold",
+          "name": "threshold",
+          "direction": "in",
+          "side": "top",
+          "offset": 0.65,
+          "symbol": "circle",
+          "typedBy": "ThresholdParam",
+          "multiplicity": "0..1"
+        },
+        {
+          "id": "controller-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "bottom",
+          "offset": 0.6,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "ports",
+          "title": "ports",
+          "kind": "text",
+          "lines": [
+            "sensorIn : DataPort",
+            "busOut : DataPort",
+            "dataInterface : DataInterface",
+            "threshold : ThresholdParam",
+            "powerIn : PowerPort"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-bus",
+      "kind": "PartUsage",
+      "name": "bus1",
+      "label": "Bus",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 700, "y": 150 },
+      "size": { "width": 210, "height": 150 },
+      "ports": [
+        {
+          "id": "bus-in",
+          "name": "busIn",
+          "direction": "in",
+          "side": "left",
+          "offset": 0.45,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "bus-out",
+          "name": "busOut",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.35,
+          "typedBy": "DataPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "bus-interface",
+          "name": "dataInterface",
+          "direction": "inout",
+          "side": "right",
+          "offset": 0.75,
+          "symbol": "lollipop",
+          "typedBy": "DataInterface",
+          "multiplicity": "1"
+        },
+        {
+          "id": "bus-power-in",
+          "name": "powerIn",
+          "direction": "in",
+          "side": "bottom",
+          "offset": 0.6,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "ports",
+          "title": "ports",
+          "kind": "text",
+          "lines": [
+            "busIn : DataPort",
+            "busOut : DataPort",
+            "dataInterface : DataInterface",
+            "powerIn : PowerPort"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-power",
+      "kind": "PartUsage",
+      "name": "power1",
+      "label": "Power",
+      "stereotype": "<<part>>",
+      "parentId": "system",
+      "position": { "x": 90, "y": 360 },
+      "size": { "width": 210, "height": 130 },
+      "ports": [
+        {
+          "id": "power-out-sensor",
+          "name": "powerOutSensor",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.3,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "power-out-controller",
+          "name": "powerOutController",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.6,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        },
+        {
+          "id": "power-out-bus",
+          "name": "powerOutBus",
+          "direction": "out",
+          "side": "right",
+          "offset": 0.85,
+          "typedBy": "PowerPort",
+          "multiplicity": "1"
+        }
+      ],
+      "compartments": [
+        {
+          "id": "ports",
+          "title": "ports",
+          "kind": "text",
+          "lines": [
+            "powerOutSensor : PowerPort",
+            "powerOutController : PowerPort",
+            "powerOutBus : PowerPort"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connection-def-data",
+      "kind": "ConnectionDefinition",
+      "name": "dataLink",
+      "icon": "CONN",
+      "stereotype": "<<connection def>>",
+      "parentId": "system",
+      "position": { "x": 520, "y": 320 },
+      "size": { "width": 200, "height": 90 },
+      "compartments": [
+        {
+          "id": "ends",
+          "title": "ends",
+          "kind": "text",
+          "lines": ["source : DataPort", "target : DataPort"]
+        }
+      ]
+    },
+    {
+      "id": "constraint-thermal",
+      "kind": "ConstraintProperty",
+      "name": "ThermalLimit",
+      "stereotype": "<<constraint>>",
+      "parentId": "system",
+      "position": { "x": 520, "y": 430 },
+      "size": { "width": 200, "height": 90 },
+      "compartments": [
+        {
+          "id": "equation",
+          "title": "constraint",
+          "kind": "text",
+          "lines": ["temp <= maxTemp"]
+        }
+      ]
+    },
+    {
+      "id": "param-temp",
+      "kind": "ParameterUsage",
+      "name": "temp",
+      "stereotype": "<<inout>>",
+      "parentId": "system",
+      "position": { "x": 360, "y": 450 }
+    },
+    {
+      "id": "param-max",
+      "kind": "ParameterUsage",
+      "name": "maxTemp",
+      "stereotype": "<<in>>",
+      "parentId": "system",
+      "position": { "x": 700, "y": 450 }
+    }
+  ],
+  "links": [
+    {
+      "id": "flow-sensor",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": { "nodeId": "part-usage-sensor", "portId": "sensor-data-out" },
+      "target": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-sensor-in"
+      },
+      "flowItem": {
+        "itemLabel": "sensorData",
+        "multiplicity": "1",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "connection-data",
+      "kind": "Connection",
+      "connectionRole": "connection",
+      "source": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-bus-out"
+      },
+      "target": { "nodeId": "part-usage-bus", "portId": "bus-in" },
+      "elaboration": {
+        "nodeId": "connection-def-data",
+        "attach": "edge",
+        "position": 0.55,
+        "label": "elaboration"
+      }
+    },
+    {
+      "id": "interface-link",
+      "kind": "InterfaceConnection",
+      "connectionRole": "interface",
+      "source": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-interface"
+      },
+      "target": { "nodeId": "part-usage-bus", "portId": "bus-interface" }
+    },
+    {
+      "id": "binding-threshold",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": {
+        "nodeId": "part-usage-sensor",
+        "portId": "sensor-threshold"
+      },
+      "target": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-threshold"
+      }
+    },
+    {
+      "id": "delegation-data",
+      "kind": "DelegationConnector",
+      "connectionRole": "delegation",
+      "source": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-interface"
+      },
+      "target": { "nodeId": "system", "portId": "system-data" }
+    },
+    {
+      "id": "flow-power-sensor",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-power",
+        "portId": "power-out-sensor"
+      },
+      "target": { "nodeId": "part-usage-sensor", "portId": "sensor-power-in" },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-power-controller",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": {
+        "nodeId": "part-usage-power",
+        "portId": "power-out-controller"
+      },
+      "target": {
+        "nodeId": "part-usage-controller",
+        "portId": "controller-power-in"
+      },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "flow-power-bus",
+      "kind": "Flow",
+      "connectionRole": "flow",
+      "source": { "nodeId": "part-usage-power", "portId": "power-out-bus" },
+      "target": { "nodeId": "part-usage-bus", "portId": "bus-power-in" },
+      "flowItem": {
+        "itemLabel": "power",
+        "direction": "sourceToTarget"
+      }
+    },
+    {
+      "id": "binding-thermal-temp",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-temp" },
+      "target": { "nodeId": "constraint-thermal" }
+    },
+    {
+      "id": "binding-thermal-max",
+      "kind": "BindingConnector",
+      "connectionRole": "binding",
+      "source": { "nodeId": "param-max" },
+      "target": { "nodeId": "constraint-thermal" }
+    }
+  ]
+}

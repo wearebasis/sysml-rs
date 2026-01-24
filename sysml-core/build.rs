@@ -202,6 +202,158 @@ fn main() {
     println!("cargo:warning=Spec coverage validation PASSED");
 
     // =====================================================================
+    // CROSS-REFERENCE COVERAGE VALIDATION
+    // =====================================================================
+    // Validate that all cross-references in the Xtext grammar are handled
+    // by the name resolution implementation.
+    //
+    // This ensures we don't miss any reference types when implementing
+    // name resolution.
+    // =====================================================================
+
+    // Paths to Xtext grammar files
+    // Note: Xtext files are only in sysmlv2-references, not in spec/
+    let xtext_refs_dir = repo_root.join("..").join("sysmlv2-references");
+    let pilot_impl_dir = xtext_refs_dir.join("SysML-v2-Pilot-Implementation");
+    let kerml_xtext_path = pilot_impl_dir
+        .join("org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext");
+    let sysml_xtext_path = pilot_impl_dir
+        .join("org.omg.sysml.xtext/src/org/omg/sysml/xtext/SysML.xtext");
+
+    // Re-run if Xtext files change
+    println!("cargo:rerun-if-changed={}", kerml_xtext_path.display());
+    println!("cargo:rerun-if-changed={}", sysml_xtext_path.display());
+
+    // Parse cross-references from Xtext grammars
+    let mut all_cross_refs = Vec::new();
+
+    if kerml_xtext_path.exists() {
+        let kerml_xtext_content = fs::read_to_string(&kerml_xtext_path)
+            .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", kerml_xtext_path, e));
+        let kerml_refs =
+            sysml_codegen::parse_xtext_cross_references(&kerml_xtext_content, "KerML.xtext");
+        println!(
+            "cargo:warning=Parsed {} cross-references from KerML.xtext",
+            kerml_refs.len()
+        );
+        all_cross_refs.extend(kerml_refs);
+    } else {
+        println!(
+            "cargo:warning=KerML.xtext not found at {:?}, skipping cross-reference validation",
+            kerml_xtext_path
+        );
+    }
+
+    if sysml_xtext_path.exists() {
+        let sysml_xtext_content = fs::read_to_string(&sysml_xtext_path)
+            .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", sysml_xtext_path, e));
+        let sysml_refs =
+            sysml_codegen::parse_xtext_cross_references(&sysml_xtext_content, "SysML.xtext");
+        println!(
+            "cargo:warning=Parsed {} cross-references from SysML.xtext",
+            sysml_refs.len()
+        );
+        all_cross_refs.extend(sysml_refs);
+    } else {
+        println!(
+            "cargo:warning=SysML.xtext not found at {:?}, skipping cross-reference validation",
+            sysml_xtext_path
+        );
+    }
+
+    // Deduplicate cross-references (same property from both files)
+    let unique_properties: std::collections::HashSet<String> = all_cross_refs
+        .iter()
+        .map(|cr| cr.property.clone())
+        .collect();
+    println!(
+        "cargo:warning=Total unique cross-reference properties: {}",
+        unique_properties.len()
+    );
+
+    // Currently implemented cross-reference properties in resolution module
+    // These are the properties that have resolution logic in src/resolution/mod.rs
+    const IMPLEMENTED_CROSSREFS: &[&str] = &[
+        // From unresolved_props constants in resolution/mod.rs
+        "general",           // Specialization.general
+        "type",              // FeatureTyping.type
+        "subsettedFeature",  // Subsetting.subsettedFeature
+        "redefinedFeature",  // Redefinition.redefinedFeature
+        "referencedFeature", // ReferenceSubsetting.referencedFeature
+        // Note: "sources" and "targets" are for Dependency but stored differently
+        // Note: "value" is for FeatureValue but not a cross-reference
+
+        // Phase B: Additional cross-references
+        "superclassifier",   // Subclassification.superclassifier
+        "conjugatedType",    // Conjugation.conjugatedType
+        "originalType",      // Conjugation.originalType
+        "featuringType",     // TypeFeaturing.featuringType
+        "disjoiningType",    // Disjoining.disjoiningType
+        "unioningType",      // Unioning.unioningType
+        "intersectingType",  // Intersecting.intersectingType
+        "differencingType",  // Differencing.differencingType
+        "invertingFeature",  // FeatureInverting.invertingFeature
+        "crossedFeature",    // FeatureChaining.crossedFeature (chainingFeature)
+        "annotatedElement",  // Annotation.annotatedElement
+        "memberElement",     // Membership.memberElement
+        "client",            // Dependency.client
+        "supplier",          // Dependency.supplier
+        "conjugatedPortDefinition", // ConjugatedPortDefinition.conjugatedPortDefinition
+    ];
+
+    // Properties that are intentionally skipped (with reasons in crossref_validation.rs)
+    // Add properties here that don't need resolution or are handled differently
+    const SKIPPED_CROSSREFS: &[&str] = &[
+        // Parser-internal properties (not stored in model)
+        "specific",          // Specialization - the owning feature, not resolved
+        "subsettingFeature", // Subsetting - the owning feature
+        "redefiningFeature", // Redefinition - the owning feature
+        "featureInverted",   // FeatureInverting - the owning feature
+        "typedFeature",      // FeatureTyping - the owning feature
+        "typeDisjoined",     // Disjoining - the owning type
+        "subclassifier",     // Subclassification - the owning classifier
+        "featureOfType",     // TypeFeaturing - the owning feature
+    ];
+
+    // Validate coverage
+    let impl_and_skipped: Vec<&str> = IMPLEMENTED_CROSSREFS
+        .iter()
+        .chain(SKIPPED_CROSSREFS.iter())
+        .copied()
+        .collect();
+    let report = sysml_codegen::validate_crossref_coverage(&all_cross_refs, &impl_and_skipped);
+
+    println!(
+        "cargo:warning=Cross-reference coverage: {}/{} ({:.1}%)",
+        report.handled.len(),
+        report.grammar_total,
+        report.coverage_percent()
+    );
+
+    if !report.unhandled.is_empty() {
+        println!(
+            "cargo:warning=Unhandled cross-references ({}): {:?}",
+            report.unhandled.len(),
+            report.unhandled
+        );
+        // Now that we have 100% coverage, enforce it going forward
+        panic!(
+            "CROSS-REFERENCE COVERAGE FAILED!\n\
+             {} unhandled properties: {:?}\n\
+             Add resolution logic or mark as intentionally skipped.",
+            report.unhandled.len(),
+            report.unhandled
+        );
+    }
+
+    if !report.extra.is_empty() {
+        println!(
+            "cargo:warning=Extra cross-references not in grammar: {:?}",
+            report.extra
+        );
+    }
+
+    // =====================================================================
     // CODE GENERATION
     // =====================================================================
 
@@ -380,5 +532,16 @@ fn main() {
     println!(
         "cargo:warning=Generated property accessors in {:?}",
         props_path
+    );
+
+    // Generate cross-reference registry
+    let crossref_code = sysml_codegen::generate_crossref_registry(&all_cross_refs);
+    let crossref_path = Path::new(&out_dir).join("crossrefs.generated.rs");
+    fs::write(&crossref_path, &crossref_code)
+        .unwrap_or_else(|e| panic!("Failed to write {:?}: {}", crossref_path, e));
+
+    println!(
+        "cargo:warning=Generated cross-reference registry with {} properties",
+        all_cross_refs.len()
     );
 }

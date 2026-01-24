@@ -1,107 +1,109 @@
 # sysml-text
 
-Parser trait and result types for SysML v2 text parsing.
+## What This Does (One Sentence)
 
-## Purpose
+Defines a standard interface so that different SysML parsers can plug into the system interchangeably.
 
-This crate defines the interface for parsing SysML v2 textual notation:
+## The Problem It Solves
 
-- **SysmlFile**: Input file with path and text content
-- **ParseResult**: Output containing ModelGraph and diagnostics
-- **Parser**: Trait for parser implementations
-- **Formatter**: Trait for formatter implementations
+There are multiple ways to parse SysML files:
 
-Parsing implementations live in separate crates:
+- A fast native Rust parser (for production)
+- The official Java "Pilot" parser (for compatibility)
+- Other parsers for specific use cases
 
-- `sysml-text-pest`: native Rust parser using pest
-- `sysml-text-*-sidecar`: adapters for external parsers (Pilot, MontiCore, SySide)
+Without a common interface, each tool would need to know about every parser's quirks. With this crate, **any parser can plug in** as long as it speaks the same language.
 
-## Public API
+Think of it like a **universal power adapter** — it doesn't matter if the parser is built in Rust, Java, or JavaScript; if it implements this interface, it works.
 
-### Types
+## How It Works
 
-```rust
-// Input file
-let file = SysmlFile::new("model.sysml", "package MyModel {}");
-
-// Parse result
-let result = ParseResult::success(graph);
-let result = ParseResult::error("parse failed");
-
-result.is_ok();       // true if no errors
-result.has_errors();  // true if any errors
-result.error_count(); // number of errors
+```
+                    ┌─────────────────────────────────────┐
+                    │           Your Application          │
+                    │                                     │
+                    │   parser.parse(&files) ─────────┐   │
+                    │                                 │   │
+                    └─────────────────────────────────│───┘
+                                                      │
+                                                      ▼
+                         ┌────────────────────────────────────┐
+                         │        Parser Trait (sysml-text)   │
+                         │  ════════════════════════════════  │
+                         │  parse(&[SysmlFile]) → ParseResult │
+                         │  name() → &str                     │
+                         │  version() → &str                  │
+                         └───────────────────┬────────────────┘
+                                             │
+             Implements                      │           Implements
+                  │                          │                │
+    ┌─────────────┴────┐     ┌──────────────┴───┐    ┌──────┴───────────┐
+    │                  │     │                  │    │                  │
+    ▼                  ▼     ▼                  ▼    ▼                  ▼
+┌────────────┐    ┌────────────┐          ┌────────────┐         ┌────────────┐
+│  Pest      │    │   Pilot    │          │ MontiCore  │         │   SySide   │
+│ (Native)   │    │  (Java)    │          │  (Java)    │         │ (Node.js)  │
+│            │    │            │          │            │         │            │
+│ Fast,      │    │ Official   │          │ Academic   │         │ VS Code    │
+│ embedded   │    │ reference  │          │ research   │         │ extension  │
+└────────────┘    └────────────┘          └────────────┘         └────────────┘
 ```
 
-### Parser Trait
+## How It Fits Into the System
 
-```rust
-pub trait Parser {
-    fn parse(&self, inputs: &[SysmlFile]) -> ParseResult;
-    fn name(&self) -> &str;
-    fn version(&self) -> &str;
-}
+```
+    ┌─────────────────────────────────────────────────────┐
+    │                Higher-Level Tools                    │
+    │   (API server, LSP server, CLI tools, tests)        │
+    └───────────────────────────┬─────────────────────────┘
+                                │
+                    They call   │  parser.parse(files)
+                                │
+                                ▼
+                        ┌───────────────┐
+                        │  sysml-text   │  ← You are here
+                        │  Parser trait │
+                        └───────┬───────┘
+                                │
+              implementations   │
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         ▼                      ▼                      ▼
+    ┌─────────┐           ┌─────────┐           ┌─────────┐
+    │  pest   │           │  pilot  │           │ others  │
+    │ parser  │           │ sidecar │           │   ...   │
+    └─────────┘           └─────────┘           └─────────┘
 ```
 
-### Formatter Trait
+## Key Concepts
+
+| Concept | What It Is | Analogy |
+|---------|-----------|---------|
+| **SysmlFile** | A file to parse (path + content) | A document handed to a translator |
+| **ParseResult** | What the parser returns (model + errors) | The translation plus any notes about problems |
+| **Parser** | Something that reads SysML text | A translator who speaks SysML |
+| **Sidecar** | A wrapper around an external parser | A translator who calls another translator |
+
+## For Developers
+
+<details>
+<summary>API Reference (click to expand)</summary>
+
+### Using a Parser
 
 ```rust
-pub trait Formatter {
-    fn format(&self, graph: &ModelGraph) -> String;
-}
-```
+use sysml_text::{Parser, SysmlFile};
+use sysml_text_pest::PestParser;  // or any other parser
 
-### Built-in Parsers
+let parser = PestParser::new();
 
-```rust
-// No-op parser (returns error)
-let parser = NoopParser::new();
-
-// Stub parser (returns empty success)
-let parser = StubParser::new();
-```
-
-## Dependencies
-
-- `sysml-core`: For ModelGraph
-- `sysml-span`: For Diagnostic
-
-## Implementing a Parser
-
-To implement a parser sidecar:
-
-```rust
-use sysml_text::{Parser, ParseResult, SysmlFile};
-use sysml_core::ModelGraph;
-
-struct MyParser;
-
-impl Parser for MyParser {
-    fn parse(&self, inputs: &[SysmlFile]) -> ParseResult {
-        // Call external parser (JVM, HTTP, etc.)
-        // Convert results to ModelGraph
-        // Return ParseResult with graph and diagnostics
-        todo!()
-    }
-
-    fn name(&self) -> &str {
-        "my-parser"
-    }
-}
-```
-
-## Example
-
-```rust
-use sysml_text::{Parser, SysmlFile, StubParser};
-
-let parser = StubParser::new();
 let files = vec![
     SysmlFile::new("a.sysml", "package A {}"),
     SysmlFile::new("b.sysml", "package B {}"),
 ];
 
 let result = parser.parse(&files);
+
 if result.is_ok() {
     println!("Parsed {} elements", result.graph.element_count());
 } else {
@@ -110,3 +112,61 @@ if result.is_ok() {
     }
 }
 ```
+
+### Implementing a Parser
+
+```rust
+use sysml_text::{Parser, ParseResult, SysmlFile};
+
+struct MyParser;
+
+impl Parser for MyParser {
+    fn parse(&self, inputs: &[SysmlFile]) -> ParseResult {
+        // Your parsing logic here
+        // Return ParseResult with graph and diagnostics
+        todo!()
+    }
+
+    fn name(&self) -> &str {
+        "my-parser"
+    }
+
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+}
+```
+
+### Built-in Test Parsers
+
+```rust
+// Returns an error (for testing error handling)
+let parser = NoopParser::new();
+
+// Returns empty success (for testing happy path)
+let parser = StubParser::new();
+```
+
+### ParseResult
+
+```rust
+// Check for success
+result.is_ok();
+result.has_errors();
+result.error_count();
+
+// Access the model
+let graph = result.graph;
+
+// Access diagnostics
+for diag in result.diagnostics {
+    println!("{}", diag);
+}
+```
+
+### Dependencies
+
+- `sysml-core`: For ModelGraph
+- `sysml-span`: For Diagnostic types
+
+</details>

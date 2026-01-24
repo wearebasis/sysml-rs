@@ -14,8 +14,6 @@ use sysml_codegen::{parse_ttl_vocab, TypeInfo};
 use sysml_text::{Parser, SysmlFile};
 use sysml_text_pest::PestParser;
 
-use crate::find_references_dir;
-
 /// Track which element kinds are produced during parsing.
 pub struct ElementCoverageTracker {
     /// Set of element kinds that have been produced.
@@ -132,29 +130,33 @@ pub fn all_element_kinds_from_spec(references_path: &Path) -> std::io::Result<Ha
     Ok(kinds)
 }
 
+/// Authoritative list of constructible element kinds.
+/// Loaded from data/constructible_kinds.txt at compile time.
+const CONSTRUCTIBLE_KINDS_DATA: &str = include_str!("../data/constructible_kinds.txt");
+
 /// Get the list of all constructible element kinds.
 ///
-/// These are kinds that have grammar rules mapping to them in ast/mod.rs.
-/// This list is derived from the TTL vocabulary files using the codegen crate.
-///
-/// # Panics
-///
-/// Panics if the references directory cannot be found. This ensures we fail fast
-/// with a clear error message rather than silently using stale fallback data.
+/// These are the 77 kinds that have grammar rules mapping to them.
+/// The list is loaded from data/constructible_kinds.txt (authoritative).
 pub fn constructible_kinds() -> HashSet<String> {
-    let refs_dir = find_references_dir();
-    let kinds = all_element_kinds_from_spec(&refs_dir).unwrap_or_else(|e| {
-        panic!(
-            "Failed to load element kinds from spec: {}\n\
-             Ensure TTL vocabulary files exist in the references directory.",
-            e
-        )
-    });
-    filter_to_constructible(&kinds)
+    load_constructible_kinds_from_data(CONSTRUCTIBLE_KINDS_DATA)
+}
+
+/// Parse the constructible kinds from the data file content.
+fn load_constructible_kinds_from_data(data: &str) -> HashSet<String> {
+    data.lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|s| s.to_string())
+        .collect()
 }
 
 /// Filter the full list of element kinds to those that are constructible
 /// (i.e., have grammar rules that produce them).
+///
+/// Note: This function is kept for testing/validation purposes.
+/// The authoritative list is in constructible_kinds.txt.
+#[cfg(test)]
 fn filter_to_constructible(all_kinds: &HashSet<String>) -> HashSet<String> {
     // The constructible kinds are a subset of all kinds - specifically those
     // that the parser can produce. For now, we filter to common ones.

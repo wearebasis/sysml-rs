@@ -1,0 +1,340 @@
+{
+  "version": "0.2",
+  "view": "ActionFlowView",
+  "viewMetadata": {
+    "title": "Action Flow View",
+    "subtitle": "Capture & Route",
+    "subject": "VehicleSystem",
+    "compartmentMode": "mixed"
+  },
+  "nodes": [
+    {
+      "id": "lane-engineer",
+      "kind": "ActivityPartition",
+      "name": "Engineer",
+      "stereotype": "<<partition>>",
+      "position": { "x": 40, "y": 60 },
+      "size": { "width": 430, "height": 760 }
+    },
+    {
+      "id": "lane-system",
+      "kind": "ActivityPartition",
+      "name": "System",
+      "stereotype": "<<partition>>",
+      "position": { "x": 520, "y": 60 },
+      "size": { "width": 430, "height": 760 }
+    },
+    {
+      "id": "action-session",
+      "kind": "ActionUsage",
+      "name": "Session",
+      "stereotype": "<<action>>",
+      "parentId": "lane-engineer",
+      "position": { "x": 60, "y": 100 },
+      "size": { "width": 340, "height": 240 },
+      "compartments": [
+        {
+          "id": "subactions",
+          "title": "actions",
+          "kind": "text",
+          "lines": ["Prepare", "Authenticate"]
+        },
+        {
+          "id": "structure",
+          "title": "structure",
+          "kind": "graphical",
+          "nodeIds": ["action-prepare", "action-auth"]
+        }
+      ]
+    },
+    {
+      "id": "action-prepare",
+      "kind": "ActionUsage",
+      "name": "Prepare",
+      "parentId": "action-session",
+      "position": { "x": 80, "y": 140 },
+      "size": { "width": 140, "height": 64 }
+    },
+    {
+      "id": "action-auth",
+      "kind": "ActionUsage",
+      "name": "Authenticate",
+      "parentId": "action-session",
+      "position": { "x": 220, "y": 140 },
+      "size": { "width": 150, "height": 64 }
+    },
+    {
+      "id": "flow-start",
+      "kind": "InitialNode",
+      "parentId": "lane-engineer",
+      "position": { "x": 80, "y": 360 }
+    },
+    {
+      "id": "param-sensor-in",
+      "kind": "ParameterUsage",
+      "name": "sensorPayload",
+      "stereotype": "<<in>>",
+      "parentId": "lane-engineer",
+      "position": { "x": 140, "y": 320 }
+    },
+    {
+      "id": "action-capture",
+      "kind": "ActionUsage",
+      "name": "Capture Sensor",
+      "parentId": "lane-engineer",
+      "position": { "x": 140, "y": 380 }
+    },
+    {
+      "id": "param-capture-out",
+      "kind": "ParameterUsage",
+      "name": "capturedData",
+      "stereotype": "<<out>>",
+      "parentId": "lane-engineer",
+      "position": { "x": 140, "y": 450 }
+    },
+    {
+      "id": "fork-parallel",
+      "kind": "ForkNode",
+      "parentId": "lane-engineer",
+      "position": { "x": 210, "y": 500 }
+    },
+    {
+      "id": "action-log",
+      "kind": "ActionUsage",
+      "name": "Log Event",
+      "parentId": "lane-engineer",
+      "position": { "x": 90, "y": 590 }
+    },
+    {
+      "id": "param-log-in",
+      "kind": "ParameterUsage",
+      "name": "auditRecord",
+      "stereotype": "<<inout>>",
+      "parentId": "lane-engineer",
+      "position": { "x": 90, "y": 670 }
+    },
+    {
+      "id": "action-route",
+      "kind": "ActionUsage",
+      "name": "Route Payload",
+      "parentId": "lane-system",
+      "position": { "x": 560, "y": 230 }
+    },
+    {
+      "id": "param-route-out",
+      "kind": "ParameterUsage",
+      "name": "routingSignal",
+      "stereotype": "<<out>>",
+      "parentId": "lane-system",
+      "position": { "x": 560, "y": 310 }
+    },
+    {
+      "id": "join-sync",
+      "kind": "JoinNode",
+      "parentId": "lane-system",
+      "position": { "x": 650, "y": 360 }
+    },
+    {
+      "id": "decision-intent",
+      "kind": "DecisionNode",
+      "name": "Intent?",
+      "parentId": "lane-system",
+      "position": { "x": 650, "y": 410 }
+    },
+    {
+      "id": "action-structure",
+      "kind": "ActionUsage",
+      "name": "Build Structure",
+      "parentId": "lane-system",
+      "position": { "x": 540, "y": 480 }
+    },
+    {
+      "id": "action-behavior",
+      "kind": "ActionUsage",
+      "name": "Simulate Behavior",
+      "parentId": "lane-system",
+      "position": { "x": 740, "y": 480 }
+    },
+    {
+      "id": "merge-outcome",
+      "kind": "MergeNode",
+      "parentId": "lane-system",
+      "position": { "x": 650, "y": 560 }
+    },
+    {
+      "id": "action-send",
+      "kind": "SendActionUsage",
+      "name": "Notify Operator",
+      "stereotype": "<<send>>",
+      "parentId": "lane-system",
+      "position": { "x": 540, "y": 610 }
+    },
+    {
+      "id": "trigger-change",
+      "kind": "ChangeTrigger",
+      "name": "status change",
+      "stereotype": "<<change>>",
+      "parentId": "lane-system",
+      "position": { "x": 740, "y": 590 }
+    },
+    {
+      "id": "action-accept",
+      "kind": "AcceptActionUsage",
+      "name": "Receive Ack",
+      "stereotype": "<<accept>>",
+      "parentId": "lane-system",
+      "position": { "x": 540, "y": 680 }
+    },
+    {
+      "id": "trigger-time",
+      "kind": "TimeTrigger",
+      "name": "after 5s",
+      "stereotype": "<<time>>",
+      "parentId": "lane-system",
+      "position": { "x": 740, "y": 660 }
+    },
+    {
+      "id": "flow-end",
+      "kind": "FinalNode",
+      "parentId": "lane-system",
+      "position": { "x": 650, "y": 730 }
+    }
+  ],
+  "links": [
+    {
+      "id": "flow-1",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "flow-start" },
+      "target": { "nodeId": "action-capture" }
+    },
+    {
+      "id": "flow-2",
+      "kind": "ObjectFlow",
+      "source": { "nodeId": "param-sensor-in" },
+      "target": { "nodeId": "action-capture" },
+      "labels": [{ "text": "input" }]
+    },
+    {
+      "id": "flow-3",
+      "kind": "ObjectFlow",
+      "source": { "nodeId": "action-capture" },
+      "target": { "nodeId": "param-capture-out" },
+      "labels": [{ "text": "output" }]
+    },
+    {
+      "id": "flow-4",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "param-capture-out" },
+      "target": { "nodeId": "fork-parallel" },
+      "labels": [{ "text": "ready" }]
+    },
+    {
+      "id": "flow-5",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "fork-parallel" },
+      "target": { "nodeId": "action-route" }
+    },
+    {
+      "id": "flow-6",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "fork-parallel" },
+      "target": { "nodeId": "action-log" }
+    },
+    {
+      "id": "flow-7",
+      "kind": "ObjectFlow",
+      "source": { "nodeId": "action-log" },
+      "target": { "nodeId": "param-log-in" }
+    },
+    {
+      "id": "flow-8",
+      "kind": "ObjectFlow",
+      "source": { "nodeId": "action-route" },
+      "target": { "nodeId": "param-route-out" }
+    },
+    {
+      "id": "flow-9",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "param-route-out" },
+      "target": { "nodeId": "join-sync" }
+    },
+    {
+      "id": "flow-10",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "param-log-in" },
+      "target": { "nodeId": "join-sync" }
+    },
+    {
+      "id": "flow-11",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "join-sync" },
+      "target": { "nodeId": "decision-intent" },
+      "labels": [{ "text": "intent" }]
+    },
+    {
+      "id": "flow-12",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "decision-intent" },
+      "target": { "nodeId": "action-structure" },
+      "labels": [{ "text": "structure" }]
+    },
+    {
+      "id": "flow-13",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "decision-intent" },
+      "target": { "nodeId": "action-behavior" },
+      "labels": [{ "text": "behavior" }]
+    },
+    {
+      "id": "flow-14",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "action-behavior" },
+      "target": { "nodeId": "decision-intent" },
+      "labels": [{ "text": "loop" }]
+    },
+    {
+      "id": "flow-15",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "action-structure" },
+      "target": { "nodeId": "merge-outcome" }
+    },
+    {
+      "id": "flow-16",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "action-behavior" },
+      "target": { "nodeId": "merge-outcome" }
+    },
+    {
+      "id": "flow-17",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "merge-outcome" },
+      "target": { "nodeId": "action-send" }
+    },
+    {
+      "id": "flow-18",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "trigger-change" },
+      "target": { "nodeId": "action-send" },
+      "labels": [{ "text": "on change" }]
+    },
+    {
+      "id": "flow-19",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "action-send" },
+      "target": { "nodeId": "action-accept" }
+    },
+    {
+      "id": "flow-20",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "trigger-time" },
+      "target": { "nodeId": "action-accept" },
+      "labels": [{ "text": "timeout" }]
+    },
+    {
+      "id": "flow-21",
+      "kind": "ControlFlow",
+      "source": { "nodeId": "action-accept" },
+      "target": { "nodeId": "flow-end" }
+    }
+  ]
+}

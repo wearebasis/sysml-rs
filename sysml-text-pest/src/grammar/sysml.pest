@@ -24,14 +24,31 @@ SL_NOTE = _{ "//*" ~ (!NEWLINE ~ ANY)* }
 // Multi-line note: //* ... */ (hidden)
 ML_NOTE = _{ "//*" ~ (!"*/" ~ ANY)* ~ "*/" }
 
-COMMENT = _{ ML_COMMENT | SL_COMMENT }
+// Note: ML_COMMENT is intentionally NOT in the implicit COMMENT rule.
+// Multi-line comments /* ... */ should only be consumed by explicit rules:
+// Comment, Documentation, TextualRepresentation (via REGULAR_COMMENT_BODY).
+// This prevents documentation comments from being silently discarded.
+COMMENT = _{ SL_COMMENT }
 
 // =============================================================================
 // TERMINALS
 // =============================================================================
 
-// Identifiers
-ID = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+// Reserved literals that cannot be used as identifiers
+//
+// SysML uses CONTEXTUAL keywords (like xtext), not RESERVED keywords (like C/Java).
+// The xtext grammar defines: ID = ('a'..'z'|'A'..'Z'|'_')('a'..'z'|'A'..'Z'|'_'|'0'..'9')*
+// with NO keyword exclusion - keywords are handled by grammar context via PEG ordered choice.
+//
+// Only true literals that can never be identifiers are blocked here.
+// All other "keywords" (action, part, state, etc.) work as identifiers in appropriate contexts.
+RESERVED = @{
+    ("true" | "false" | "null") ~ !(ASCII_ALPHANUMERIC | "_")
+}
+
+// Identifiers - only block true literals
+// Keywords are contextual and handled by grammar rules using KW_* with PEG ordered choice
+ID = @{ !RESERVED ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Unrestricted name: 'name with spaces'
 UNRESTRICTED_NAME = @{ "'" ~ (ESCAPE_SEQUENCE | (!("'" | "\\") ~ ANY))* ~ "'" }
@@ -72,182 +89,183 @@ QualifiedName = { Name ~ ("::" ~ Name)* }
 
 // =============================================================================
 // KEYWORDS (Generated from SysML/KerML xtext files)
+// Keywords use word boundary checking to prevent partial matching.
 // =============================================================================
 
-KW_ABOUT = { "about" }
-KW_ABSTRACT = { "abstract" }
-KW_ACCEPT = { "accept" }
-KW_ACTION = { "action" }
-KW_ACTOR = { "actor" }
-KW_AFTER = { "after" }
-KW_ALIAS = { "alias" }
-KW_ALL = { "all" }
-KW_ALLOCATE = { "allocate" }
-KW_ALLOCATION = { "allocation" }
-KW_ANALYSIS = { "analysis" }
-KW_AND = { "and" }
-KW_AS = { "as" }
-KW_ASSERT = { "assert" }
-KW_ASSIGN = { "assign" }
-KW_ASSOC = { "assoc" }
-KW_ASSUME = { "assume" }
-KW_AT = { "at" }
-KW_ATTRIBUTE = { "attribute" }
-KW_BEHAVIOR = { "behavior" }
-KW_BIND = { "bind" }
-KW_BINDING = { "binding" }
-KW_BOOL = { "bool" }
-KW_BY = { "by" }
-KW_CALC = { "calc" }
-KW_CASE = { "case" }
-KW_CHAINS = { "chains" }
-KW_CLASS = { "class" }
-KW_CLASSIFIER = { "classifier" }
-KW_COMMENT = { "comment" }
-KW_COMPOSITE = { "composite" }
-KW_CONCERN = { "concern" }
-KW_CONJUGATE = { "conjugate" }
-KW_CONJUGATES = { "conjugates" }
-KW_CONJUGATION = { "conjugation" }
-KW_CONNECT = { "connect" }
-KW_CONNECTION = { "connection" }
-KW_CONNECTOR = { "connector" }
-KW_CONST = { "const" }
-KW_CONSTANT = { "constant" }
-KW_CONSTRAINT = { "constraint" }
-KW_CROSSES = { "crosses" }
-KW_DATATYPE = { "datatype" }
-KW_DECIDE = { "decide" }
-KW_DEF = { "def" }
-KW_DEFAULT = { "default" }
-KW_DEFINED = { "defined" }
-KW_DEPENDENCY = { "dependency" }
-KW_DERIVED = { "derived" }
-KW_DIFFERENCES = { "differences" }
-KW_DISJOINING = { "disjoining" }
-KW_DISJOINT = { "disjoint" }
-KW_DO = { "do" }
-KW_DOC = { "doc" }
-KW_ELSE = { "else" }
-KW_END = { "end" }
-KW_ENTRY = { "entry" }
-KW_ENUM = { "enum" }
-KW_EVENT = { "event" }
-KW_EXHIBIT = { "exhibit" }
-KW_EXIT = { "exit" }
-KW_EXPOSE = { "expose" }
-KW_EXPR = { "expr" }
-KW_FALSE = { "false" }
-KW_FEATURE = { "feature" }
-KW_FEATURED = { "featured" }
-KW_FEATURING = { "featuring" }
-KW_FILTER = { "filter" }
-KW_FIRST = { "first" }
-KW_FLOW = { "flow" }
-KW_FOR = { "for" }
-KW_FORK = { "fork" }
-KW_FRAME = { "frame" }
-KW_FROM = { "from" }
-KW_FUNCTION = { "function" }
-KW_HASTYPE = { "hastype" }
-KW_IF = { "if" }
-KW_IMPLIES = { "implies" }
-KW_IMPORT = { "import" }
-KW_IN = { "in" }
-KW_INCLUDE = { "include" }
-KW_INDIVIDUAL = { "individual" }
-KW_INOUT = { "inout" }
-KW_INTERACTION = { "interaction" }
-KW_INTERFACE = { "interface" }
-KW_INTERSECTS = { "intersects" }
-KW_INV = { "inv" }
-KW_INVERSE = { "inverse" }
-KW_INVERTING = { "inverting" }
-KW_ISTYPE = { "istype" }
-KW_ITEM = { "item" }
-KW_JOIN = { "join" }
-KW_LANGUAGE = { "language" }
-KW_LIBRARY = { "library" }
-KW_LOCALE = { "locale" }
-KW_LOOP = { "loop" }
-KW_MEMBER = { "member" }
-KW_MERGE = { "merge" }
-KW_MESSAGE = { "message" }
-KW_META = { "meta" }
-KW_METACLASS = { "metaclass" }
-KW_METADATA = { "metadata" }
-KW_MULTIPLICITY = { "multiplicity" }
-KW_NAMESPACE = { "namespace" }
-KW_NEW = { "new" }
-KW_NONUNIQUE = { "nonunique" }
-KW_NOT = { "not" }
-KW_NULL = { "null" }
-KW_OBJECTIVE = { "objective" }
-KW_OCCURRENCE = { "occurrence" }
-KW_OF = { "of" }
-KW_OR = { "or" }
-KW_ORDERED = { "ordered" }
-KW_OUT = { "out" }
-KW_PACKAGE = { "package" }
-KW_PARALLEL = { "parallel" }
-KW_PART = { "part" }
-KW_PERFORM = { "perform" }
-KW_PORT = { "port" }
-KW_PORTION = { "portion" }
-KW_PREDICATE = { "predicate" }
-KW_PRIVATE = { "private" }
-KW_PROTECTED = { "protected" }
-KW_PUBLIC = { "public" }
-KW_READONLY = { "readonly" }
-KW_REDEFINES = { "redefines" }
-KW_REDEFINITION = { "redefinition" }
-KW_REF = { "ref" }
-KW_REFERENCES = { "references" }
-KW_RENDER = { "render" }
-KW_RENDERING = { "rendering" }
-KW_REP = { "rep" }
-KW_REQUIRE = { "require" }
-KW_REQUIREMENT = { "requirement" }
-KW_RETURN = { "return" }
-KW_SATISFY = { "satisfy" }
-KW_SEND = { "send" }
-KW_SNAPSHOT = { "snapshot" }
-KW_SPECIALIZATION = { "specialization" }
-KW_SPECIALIZES = { "specializes" }
-KW_STAKEHOLDER = { "stakeholder" }
-KW_STANDARD = { "standard" }
-KW_STATE = { "state" }
-KW_STEP = { "step" }
-KW_STRUCT = { "struct" }
-KW_SUBCLASSIFIER = { "subclassifier" }
-KW_SUBJECT = { "subject" }
-KW_SUBSET = { "subset" }
-KW_SUBSETS = { "subsets" }
-KW_SUBTYPE = { "subtype" }
-KW_SUCCESSION = { "succession" }
-KW_TERMINATE = { "terminate" }
-KW_THEN = { "then" }
-KW_TIMESLICE = { "timeslice" }
-KW_TO = { "to" }
-KW_TRANSITION = { "transition" }
-KW_TRUE = { "true" }
-KW_TYPE = { "type" }
-KW_TYPED = { "typed" }
-KW_TYPING = { "typing" }
-KW_UNIONS = { "unions" }
-KW_UNTIL = { "until" }
-KW_USE = { "use" }
-KW_VAR = { "var" }
-KW_VARIANT = { "variant" }
-KW_VARIATION = { "variation" }
-KW_VERIFICATION = { "verification" }
-KW_VERIFY = { "verify" }
-KW_VIA = { "via" }
-KW_VIEW = { "view" }
-KW_VIEWPOINT = { "viewpoint" }
-KW_WHEN = { "when" }
-KW_WHILE = { "while" }
-KW_XOR = { "xor" }
+KW_ABOUT = @{ "about" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ABSTRACT = @{ "abstract" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ACCEPT = @{ "accept" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ACTION = @{ "action" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ACTOR = @{ "actor" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_AFTER = @{ "after" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ALIAS = @{ "alias" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ALL = @{ "all" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ALLOCATE = @{ "allocate" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ALLOCATION = @{ "allocation" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ANALYSIS = @{ "analysis" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_AND = @{ "and" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_AS = @{ "as" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ASSERT = @{ "assert" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ASSIGN = @{ "assign" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ASSOC = @{ "assoc" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ASSUME = @{ "assume" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_AT = @{ "at" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ATTRIBUTE = @{ "attribute" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_BEHAVIOR = @{ "behavior" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_BIND = @{ "bind" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_BINDING = @{ "binding" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_BOOL = @{ "bool" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_BY = @{ "by" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CALC = @{ "calc" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CASE = @{ "case" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CHAINS = @{ "chains" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CLASS = @{ "class" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CLASSIFIER = @{ "classifier" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_COMMENT = @{ "comment" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_COMPOSITE = @{ "composite" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONCERN = @{ "concern" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONJUGATE = @{ "conjugate" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONJUGATES = @{ "conjugates" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONJUGATION = @{ "conjugation" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONNECT = @{ "connect" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONNECTION = @{ "connection" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONNECTOR = @{ "connector" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONST = @{ "const" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONSTANT = @{ "constant" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CONSTRAINT = @{ "constraint" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_CROSSES = @{ "crosses" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DATATYPE = @{ "datatype" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DECIDE = @{ "decide" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DEF = @{ "def" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DEFAULT = @{ "default" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DEFINED = @{ "defined" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DEPENDENCY = @{ "dependency" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DERIVED = @{ "derived" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DIFFERENCES = @{ "differences" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DISJOINING = @{ "disjoining" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DISJOINT = @{ "disjoint" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DO = @{ "do" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_DOC = @{ "doc" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ELSE = @{ "else" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_END = @{ "end" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ENTRY = @{ "entry" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ENUM = @{ "enum" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_EVENT = @{ "event" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_EXHIBIT = @{ "exhibit" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_EXIT = @{ "exit" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_EXPOSE = @{ "expose" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_EXPR = @{ "expr" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FALSE = @{ "false" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FEATURE = @{ "feature" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FEATURED = @{ "featured" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FEATURING = @{ "featuring" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FILTER = @{ "filter" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FIRST = @{ "first" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FLOW = @{ "flow" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FOR = @{ "for" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FORK = @{ "fork" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FRAME = @{ "frame" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FROM = @{ "from" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_FUNCTION = @{ "function" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_HASTYPE = @{ "hastype" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_IF = @{ "if" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_IMPLIES = @{ "implies" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_IMPORT = @{ "import" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_IN = @{ "in" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INCLUDE = @{ "include" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INDIVIDUAL = @{ "individual" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INOUT = @{ "inout" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INTERACTION = @{ "interaction" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INTERFACE = @{ "interface" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INTERSECTS = @{ "intersects" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INV = @{ "inv" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INVERSE = @{ "inverse" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_INVERTING = @{ "inverting" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ISTYPE = @{ "istype" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ITEM = @{ "item" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_JOIN = @{ "join" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_LANGUAGE = @{ "language" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_LIBRARY = @{ "library" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_LOCALE = @{ "locale" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_LOOP = @{ "loop" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_MEMBER = @{ "member" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_MERGE = @{ "merge" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_MESSAGE = @{ "message" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_META = @{ "meta" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_METACLASS = @{ "metaclass" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_METADATA = @{ "metadata" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_MULTIPLICITY = @{ "multiplicity" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_NAMESPACE = @{ "namespace" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_NEW = @{ "new" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_NONUNIQUE = @{ "nonunique" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_NOT = @{ "not" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_NULL = @{ "null" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_OBJECTIVE = @{ "objective" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_OCCURRENCE = @{ "occurrence" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_OF = @{ "of" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_OR = @{ "or" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_ORDERED = @{ "ordered" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_OUT = @{ "out" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PACKAGE = @{ "package" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PARALLEL = @{ "parallel" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PART = @{ "part" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PERFORM = @{ "perform" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PORT = @{ "port" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PORTION = @{ "portion" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PREDICATE = @{ "predicate" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PRIVATE = @{ "private" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PROTECTED = @{ "protected" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_PUBLIC = @{ "public" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_READONLY = @{ "readonly" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REDEFINES = @{ "redefines" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REDEFINITION = @{ "redefinition" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REF = @{ "ref" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REFERENCES = @{ "references" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_RENDER = @{ "render" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_RENDERING = @{ "rendering" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REP = @{ "rep" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REQUIRE = @{ "require" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_REQUIREMENT = @{ "requirement" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_RETURN = @{ "return" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SATISFY = @{ "satisfy" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SEND = @{ "send" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SNAPSHOT = @{ "snapshot" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SPECIALIZATION = @{ "specialization" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SPECIALIZES = @{ "specializes" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_STAKEHOLDER = @{ "stakeholder" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_STANDARD = @{ "standard" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_STATE = @{ "state" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_STEP = @{ "step" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_STRUCT = @{ "struct" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUBCLASSIFIER = @{ "subclassifier" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUBJECT = @{ "subject" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUBSET = @{ "subset" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUBSETS = @{ "subsets" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUBTYPE = @{ "subtype" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_SUCCESSION = @{ "succession" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TERMINATE = @{ "terminate" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_THEN = @{ "then" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TIMESLICE = @{ "timeslice" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TO = @{ "to" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TRANSITION = @{ "transition" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TRUE = @{ "true" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TYPE = @{ "type" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TYPED = @{ "typed" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_TYPING = @{ "typing" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_UNIONS = @{ "unions" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_UNTIL = @{ "until" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_USE = @{ "use" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VAR = @{ "var" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VARIANT = @{ "variant" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VARIATION = @{ "variation" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VERIFICATION = @{ "verification" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VERIFY = @{ "verify" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VIA = @{ "via" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VIEW = @{ "view" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_VIEWPOINT = @{ "viewpoint" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_WHEN = @{ "when" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_WHILE = @{ "while" ~ !(ASCII_ALPHANUMERIC | "_") }
+KW_XOR = @{ "xor" ~ !(ASCII_ALPHANUMERIC | "_") }
 
 // =============================================================================
 // OPERATORS (Generated from KerMLExpressions.xtext)
@@ -276,11 +294,11 @@ UnaryOperator = { KW_NOT | "+" | "-" | "~" }
 // ENUMS (Generated from SysML.xtext)
 // =============================================================================
 
-FeatureDirectionKind = { KW_IN | KW_INOUT | KW_OUT }
-PortionKind = { KW_SNAPSHOT | KW_TIMESLICE }
-RequirementConstraintKind = { KW_ASSUME | KW_FRAME | KW_REQUIRE | KW_VERIFY }
+FeatureDirectionKind = { KW_INOUT | KW_OUT | KW_IN }
+PortionKind = { KW_TIMESLICE | KW_SNAPSHOT }
+RequirementConstraintKind = { KW_REQUIRE | KW_ASSUME | KW_VERIFY | KW_FRAME }
 TransitionFeatureKind = { KW_ACCEPT | KW_DO | KW_IF }
-VisibilityKind = { KW_EXPOSE | KW_PRIVATE | KW_PROTECTED | KW_PUBLIC }
+VisibilityKind = { KW_PROTECTED | KW_PRIVATE | KW_EXPOSE | KW_PUBLIC }
 
 // =============================================================================
 // TOKENS (Composite tokens that reference keywords)
@@ -313,6 +331,13 @@ Standard = { KW_STANDARD }
 ImportAll = { KW_ALL }
 Variation = { KW_VARIATION }
 Individual = { KW_INDIVIDUAL }
+
+// KerML feature modifiers (for standard library parsing)
+// These appear in BasicFeaturePrefix: composite | portion, var | const
+Composite = { KW_COMPOSITE }
+FeaturePortion = { KW_PORTION }
+Variable = { KW_VAR }
+Constant = { KW_CONST }
 
 MultiplicityProperties = {
     (KW_ORDERED ~ KW_NONUNIQUE?)
@@ -348,6 +373,10 @@ PackageBodyElement = {
     | AliasMember
     | ElementFilterMember
     | AnnotatingMember
+    // Actor/Subject/Stakeholder members (allowed in package bodies as extension)
+    | ActorMember
+    | StakeholderMember
+    | SubjectMember
     | UsageMember
     | DefinitionMember
     | RelationshipMember
@@ -363,8 +392,10 @@ Import = {
 
 ImportPrefix = { Visibility? ~ KW_IMPORT ~ ImportAll? }
 
+// ImportedReference: QualifiedName with optional ::* or ::** suffix
+// IMPORTANT: Try ::** BEFORE ::* since ::* is a prefix of ::**
 ImportedReference = {
-    QualifiedName ~ ImportNamespaceMarker? ~ ImportRecursiveMarker?
+    QualifiedName ~ (ImportRecursiveMarker | ImportNamespaceMarker)?
 }
 
 ImportNamespaceMarker = { "::*" }
@@ -432,6 +463,21 @@ DefinitionElement = {
     | ViewpointDefinition
     | RenderingDefinition
     | ExtendedDefinition
+    // KerML types (needed for standard library parsing)
+    | ClassifierDefinition
+    | DatatypeDefinition
+    | ClassDefinition
+    | StructDefinition
+    | AssociationDefinition
+    | AssociationStructDefinition
+    | MultiplicityDefinition
+    | FeatureDefinition
+    // KerML behavior/function types (for standard library parsing)
+    | BehaviorDefinition
+    | FunctionDefinition
+    | PredicateDefinition
+    | InteractionDefinition
+    | MetaclassDefinition
 }
 
 DefinitionPrefix = { BasicDefinitionPrefix? ~ DefinitionExtensionKeyword* }
@@ -449,8 +495,19 @@ DefinitionBodyItem = {
     | RelationshipMember
     | DefinitionMember
     | VariantUsageMember
+    // Actor/Stakeholder/Subject members (allowed in package bodies as extension)
+    | ActorMember
+    | StakeholderMember
+    | SubjectMember
     | NonOccurrenceUsageMember
-    | OccurrenceUsageMember
+    // OccurrenceUsageMember can be preceded by 'then' (empty succession marker)
+    | OccurrenceUsageMemberWithSuccession
+}
+
+// OccurrenceUsageMember with optional 'then' prefix for successions
+// Pattern: [then [multiplicity]] [visibility] occurrence_usage
+OccurrenceUsageMemberWithSuccession = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ OccurrenceUsageElement
 }
 
 // Subclassification
@@ -530,11 +587,27 @@ ActionDefinition = {
 
 ActionBody = { ";" | "{" ~ ActionBodyItem* ~ "}" }
 
+// ActionBodyItem: Items allowed inside action bodies
+// The xtext grammar has complex patterns for succession handling:
+// - (then)? StructureUsageMember
+// - InitialNodeMember followed by TargetSuccessionMember*
+// - (then)? (BehaviorUsageMember | ActionNodeMember) followed by TargetSuccessionMember*
 ActionBodyItem = {
     DefinitionBodyItem
-    | InitialNodeMember
+    | InitialNodeMember ~ TargetSuccessionMember*
     | ControlNodeMember
-    | ActionNodeMember
+    // Behavior usages (including IncludeUseCaseUsage) with optional then prefix and succession chain
+    | ActionBodyBehaviorMember
+    // Standalone target succession (for else branches etc)
+    | TargetSuccessionMember
+}
+
+// ActionBodyBehaviorMember: Behavior usage element with optional then prefix and succession chain
+// Pattern: [then] (BehaviorUsageElement | ActionNode) [then target]*
+ActionBodyBehaviorMember = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~
+    (BehaviorUsageElement | ActionNode) ~
+    TargetSuccessionMember*
 }
 
 InitialNodeMember = { Visibility? ~ KW_FIRST ~ QualifiedName ~ RelationshipBody }
@@ -550,18 +623,67 @@ StateDefinition = {
 StateBody = { ";" | KW_PARALLEL? ~ "{" ~ StateBodyItem* ~ "}" }
 
 StateBodyItem = {
-    DefinitionBodyItem
-    | EntryActionMember
+    // Entry/Do/Exit with optional transitions after - must come first!
+    // Pattern: entry; then off;
+    EntryActionMember ~ EntryTransitionMember*
     | DoActionMember
     | ExitActionMember
     | TransitionUsageMember
+    | Import
+    | AliasMember
+    | AnnotatingMember
+    | DefinitionMember
+    | VariantUsageMember
+    | NonOccurrenceUsageMember
+    // Structure usages with optional 'then' prefix
+    | (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ StructureUsageElement
+    // Behavior usages with optional accept/transitions
+    | StateBodyBehaviorItem
+}
+
+// StateBodyBehaviorItem: Behavior usage followed by optional transitions
+// Handles: accept SigSwitchOn then standBy;
+StateBodyBehaviorItem = {
+    (KW_THEN ~ OwnedMultiplicity?)? ~ Visibility? ~ BehaviorUsageElement ~ TargetTransitionMember*
+}
+
+// TargetTransitionMember: Transition after a behavior usage in state body
+// Handles: then standBy; or accept trigger then target;
+TargetTransitionMember = { Visibility? ~ TargetTransitionUsage }
+
+// TargetTransitionUsage: A transition usage targeting a state
+// Can have optional trigger, guard, effect before 'then target'
+TargetTransitionUsage = {
+    (
+        KW_TRANSITION ~ TriggerActionMember? ~ GuardExpressionMember? ~ EffectBehaviorMember?
+        | TriggerActionMember ~ GuardExpressionMember? ~ EffectBehaviorMember?
+        | GuardExpressionMember ~ EffectBehaviorMember?
+    )? ~
+    KW_THEN ~ TransitionSuccessionMember ~ ActionBody
 }
 
 EntryActionMember = { Visibility? ~ KW_ENTRY ~ StateActionUsage }
 DoActionMember = { Visibility? ~ KW_DO ~ StateActionUsage }
 ExitActionMember = { Visibility? ~ KW_EXIT ~ StateActionUsage }
 
-StateActionUsage = { ";" | UsageDeclaration? ~ ActionBody }
+// EntryTransitionMember: Transition after entry action
+// Handles: entry; then off;
+EntryTransitionMember = { Visibility? ~ (GuardedTargetSuccession | KW_THEN ~ TransitionSuccession) ~ ";" }
+
+// StateActionUsage supports:
+// - Empty: ";"
+// - PerformedActionUsage: (OwnedReferenceSubsetting | "action" UsageDeclaration?) ValuePart? ActionBody
+StateActionUsage = {
+    ";"
+    | PerformedActionUsageDeclaration ~ ValuePart? ~ ActionBody
+}
+
+// KW_ACTION first - if we see 'action' keyword, use that branch.
+// Otherwise fall back to OwnedReferenceSubsetting for patterns like `:>> someAction`
+PerformedActionUsageDeclaration = {
+    KW_ACTION ~ UsageDeclaration?
+    | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
+}
 
 TransitionUsageMember = { Visibility? ~ TransitionUsage }
 
@@ -594,8 +716,22 @@ RequirementBodyItem = {
     DefinitionBodyItem
     | SubjectMember
     | RequirementConstraintMember
+    | FramedConcernMember
     | ActorMember
     | StakeholderMember
+}
+
+// FramedConcernMember: 'frame' concern_usage
+// Pattern: frame concern ConcernName;
+FramedConcernMember = { Visibility? ~ KW_FRAME ~ FramedConcernUsage }
+
+// FramedConcernUsage supports:
+// 1. Reference subsetting: :>> concernRef { ... }
+// 2. With 'concern' keyword: concern [name] [body]
+FramedConcernUsage = {
+    OwnedReferenceSubsetting ~ FeatureSpecialization* ~ RequirementBody
+    | (PrefixMetadata* ~ KW_CONCERN | PrefixMetadata+) ~
+        UsageDeclaration? ~ ValuePart? ~ RequirementBody
 }
 
 SubjectMember = { Visibility? ~ KW_SUBJECT ~ SubjectUsage }
@@ -605,8 +741,14 @@ RequirementConstraintMember = {
     Visibility? ~ RequirementConstraintKind ~ RequirementConstraintUsage
 }
 // Note: RequirementConstraintKind is generated from xtext enums
+// RequirementConstraintUsage supports:
+// 1. Reference subsetting: :>> constraintRef { ... }
+// 2. With 'constraint' keyword: constraint [name] { ... }
+// 3. Inline expression: { expr }
 RequirementConstraintUsage = {
     OwnedReferenceSubsetting ~ FeatureSpecialization* ~ CalculationBody
+    | (PrefixMetadata* ~ KW_CONSTRAINT | PrefixMetadata+) ~
+        UsageDeclaration? ~ ValuePart? ~ CalculationBody
     | UsageDeclaration? ~ CalculationBody
 }
 
@@ -679,6 +821,86 @@ ExtendedDefinition = {
 }
 
 // =============================================================================
+// KERML TYPES (for standard library parsing)
+// =============================================================================
+
+// KerML Classifier: [abstract] classifier Name [:> Parent] { ... } | ;
+ClassifierDefinition = {
+    DefinitionPrefix ~ KW_CLASSIFIER ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML DataType: [abstract] datatype Name [:> Parent] { ... } | ;
+DatatypeDefinition = {
+    DefinitionPrefix ~ KW_DATATYPE ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Class: [abstract] class Name [:> Parent] { ... } | ;
+ClassDefinition = {
+    DefinitionPrefix ~ KW_CLASS ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Structure: [abstract] struct Name [:> Parent] { ... } | ;
+StructDefinition = {
+    DefinitionPrefix ~ KW_STRUCT ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Association: [abstract] assoc Name [:> Parent] { ... } | ;
+AssociationDefinition = {
+    DefinitionPrefix ~ KW_ASSOC ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML AssociationStructure: [abstract] assoc struct Name [:> Parent] { ... } | ;
+AssociationStructDefinition = {
+    DefinitionPrefix ~ KW_ASSOC ~ KW_STRUCT ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Multiplicity: multiplicity Name [bounds] { ... } | ;
+MultiplicityDefinition = {
+    KW_MULTIPLICITY ~ Identification? ~ OwnedMultiplicity? ~ DefinitionBody
+}
+
+// KerML Feature: [modifiers] feature [name] [:> Parent] [= value] { ... } | ;
+// Uses RefPrefix to support all KerML feature modifiers (var, composite, portion, const, derived)
+// Per KerML.xtext: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration? | ...)
+FeatureDefinition = {
+    RefPrefix ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+}
+
+// KerML Behavior: [abstract] behavior Name [:> Parent] { ... } | ;
+BehaviorDefinition = {
+    DefinitionPrefix ~ KW_BEHAVIOR ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Function: [abstract] function Name [:> Parent] { ... } | ;
+// Uses FunctionBody which supports return and result expression
+FunctionDefinition = {
+    DefinitionPrefix ~ KW_FUNCTION ~ DefinitionDeclaration ~ FunctionBody
+}
+
+// KerML Predicate: [abstract] predicate Name [:> Parent] { ... } | ;
+PredicateDefinition = {
+    DefinitionPrefix ~ KW_PREDICATE ~ DefinitionDeclaration ~ FunctionBody
+}
+
+// KerML Interaction: [abstract] interaction Name [:> Parent] { ... } | ;
+InteractionDefinition = {
+    DefinitionPrefix ~ KW_INTERACTION ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// KerML Metaclass: [abstract] metaclass Name [:> Parent] { ... } | ;
+MetaclassDefinition = {
+    DefinitionPrefix ~ KW_METACLASS ~ DefinitionDeclaration ~ DefinitionBody
+}
+
+// FunctionBody: Function and predicate body with return and result expression
+FunctionBody = { ";" | "{" ~ FunctionBodyItem* ~ ResultExpressionMember? ~ "}" }
+
+FunctionBodyItem = {
+    DefinitionBodyItem
+    | ReturnParameterMember
+}
+
+// =============================================================================
 // USAGES
 // =============================================================================
 
@@ -687,13 +909,21 @@ UsageElement = {
     | OccurrenceUsageElement
 }
 
+// DefaultReferenceUsage MUST come first - it matches usages without explicit keyword
+// like "in x: Type" or "out y[0..*]: SomeType"
 NonOccurrenceUsageElement = {
-    ReferenceUsage
+    DefaultReferenceUsage
+    | ReferenceUsage
     | AttributeUsage
     | EnumerationUsage
     | BindingConnectorAsUsage
     | SuccessionAsUsage
     | ExtendedUsage
+    // KerML feature types (for standard library parsing)
+    | StepUsage
+    | ExpressionUsage
+    | BooleanExpressionUsage
+    | InvariantUsage
 }
 
 OccurrenceUsageElement = {
@@ -712,7 +942,9 @@ StructureUsageElement = {
     | ConnectionUsage
     | InterfaceUsage
     | AllocationUsage
+    | SuccessionFlowUsage
     | FlowConnectionUsage
+    | MessageUsage
     | ViewUsage
     | RenderingUsage
 }
@@ -748,12 +980,37 @@ VariantReference = { OwnedReferenceSubsetting ~ FeatureSpecialization* ~ UsageBo
 UsagePrefix = { UnextendedUsagePrefix ~ UsageExtensionKeyword* }
 UnextendedUsagePrefix = { EndUsagePrefix | BasicUsagePrefix }
 BasicUsagePrefix = { RefPrefix ~ Reference? }
-RefPrefix = { FeatureDirectionKind? ~ BasicDefinitionPrefix? ~ Readonly? ~ Derived? }
+// KerML BasicFeaturePrefix: direction? derived? abstract? (composite|portion)? (var|const)?
+// Note: FeaturePortion (the 'portion' keyword) is distinct from Portion (which is PortionKind: timeslice|snapshot)
+RefPrefix = {
+    FeatureDirectionKind? ~
+    Derived? ~
+    BasicDefinitionPrefix? ~
+    (Composite | FeaturePortion)? ~
+    (Variable | Constant)? ~
+    Readonly?
+}
 Reference = { KW_REF }
 EndUsagePrefix = { End ~ OwnedCrossingFeatureMember? }
 UsageExtensionKeyword = { PrefixMetadataMember }
-OwnedCrossingFeatureMember = { OwnedCrossingFeature }
+// OwnedCrossingFeatureMember must NOT match usage keywords (occurrence, port, etc.)
+// It's only for cross-features with explicit prefix modifiers (in/out/ref/etc.)
+OwnedCrossingFeatureMember = { !UsageKeywordLookahead ~ OwnedCrossingFeature }
 OwnedCrossingFeature = { BasicUsagePrefix? ~ UsageDeclaration }
+
+// Lookahead for usage keywords that should NOT be consumed by OwnedCrossingFeatureMember
+// or DefaultReferenceUsage (prevents keywords from being parsed as identifiers)
+UsageKeywordLookahead = {
+    KW_OCCURRENCE | KW_ITEM | KW_PART | KW_PORT | KW_CONNECTION |
+    KW_INTERFACE | KW_ALLOCATION | KW_FLOW | KW_ACTION | KW_STATE |
+    KW_CONSTRAINT | KW_REQUIREMENT | KW_CONCERN | KW_CASE | KW_ANALYSIS |
+    KW_VERIFICATION | KW_VIEW | KW_VIEWPOINT | KW_RENDERING | KW_EVENT |
+    KW_ATTRIBUTE | KW_ENUM | KW_CALC | KW_REF | KW_SUCCESSION | KW_BIND |
+    KW_BINDING | KW_ALLOCATE | KW_CONNECT | KW_PERFORM | KW_EXHIBIT |
+    KW_INCLUDE | KW_SATISFY | KW_ASSERT | KW_USE |
+    // Actor/Subject/Stakeholder keywords (for package body extension)
+    KW_ACTOR | KW_SUBJECT | KW_STAKEHOLDER
+}
 
 UsageDeclaration = { FeatureDeclaration }
 
@@ -766,8 +1023,10 @@ ReferenceUsage = {
     (EndUsagePrefix | RefPrefix) ~ KW_REF ~ UsageDeclaration? ~ UsageCompletion
 }
 
+// !UsageKeywordLookahead prevents matching when usage keyword follows (e.g., "inout part x")
+// Otherwise DefaultReferenceUsage would match "inout" and treat "part" as an identifier name
 DefaultReferenceUsage = {
-    End? ~ RefPrefix ~ UsageDeclaration? ~ UsageCompletion
+    End? ~ RefPrefix ~ !UsageKeywordLookahead ~ UsageDeclaration? ~ UsageCompletion
 }
 
 AttributeUsage = {
@@ -800,8 +1059,9 @@ PortionUsage = {
 
 EventOccurrenceUsage = {
     OccurrenceUsagePrefix ~ KW_EVENT ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_OCCURRENCE ~ UsageDeclaration?
+        // KW_OCCURRENCE must come first - otherwise "occurrence" matches as QualifiedName
+        KW_OCCURRENCE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ UsageCompletion
 }
 
@@ -867,10 +1127,43 @@ FlowConnectionUsage = {
     OccurrenceUsagePrefix ~ KW_FLOW ~ FlowConnectionDeclaration ~ DefinitionBody
 }
 
+SuccessionFlowUsage = {
+    OccurrenceUsagePrefix ~ KW_SUCCESSION ~ KW_FLOW ~ FlowConnectionDeclaration ~ DefinitionBody
+}
+
+MessageUsage = {
+    OccurrenceUsagePrefix ~ KW_MESSAGE ~ MessageDeclaration ~ DefinitionBody
+}
+
+MessageDeclaration = {
+    MessageEventMember ~ KW_TO ~ MessageEventMember
+    | UsageDeclaration? ~ ValuePart? ~ (KW_OF ~ PayloadFeatureMember)? ~
+        (KW_FROM ~ MessageEventMember ~ KW_TO ~ MessageEventMember)?
+}
+
+PayloadFeatureMember = { ItemFeature }
+
+MessageEventMember = { OwnedExpression }
+
+// FlowConnectionDeclaration: Ordered alternatives for PEG
+// CRITICAL: Try keyword-starting patterns FIRST to prevent keywords being parsed as identifiers
 FlowConnectionDeclaration = {
-    FlowEndMember ~ KW_TO ~ FlowEndMember
-    | UsageDeclaration? ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)? ~
-        (KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember)?
+    // Pattern 1: Bare 'from a.x to b.y'
+    KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 2: 'of item from ... to ...' (no declaration)
+    | KW_OF ~ ItemFeatureMember ~ KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 3: 'of item' only (no endpoints)
+    | KW_OF ~ ItemFeatureMember
+    // Pattern 4: With declaration then 'from'
+    | UsageDeclaration ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)? ~
+        KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 5: With declaration then 'of' then 'from'
+    | UsageDeclaration ~ ValuePart? ~ KW_OF ~ ItemFeatureMember ~
+        KW_FROM ~ FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 6: Direct endpoints 'a.x to b.y' (no 'from')
+    | FlowEndMember ~ KW_TO ~ FlowEndMember
+    // Pattern 7: Declaration with optional 'of' (no endpoints)
+    | UsageDeclaration ~ ValuePart? ~ (KW_OF ~ ItemFeatureMember)?
 }
 
 ItemFeatureMember = { ItemFeature }
@@ -913,8 +1206,8 @@ ActionUsage = {
 
 PerformActionUsage = {
     OccurrenceUsagePrefix ~ KW_PERFORM ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_ACTION ~ UsageDeclaration?
+        KW_ACTION ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ ActionBody
 }
 
@@ -928,8 +1221,8 @@ StateUsage = {
 
 ExhibitStateUsage = {
     OccurrenceUsagePrefix ~ KW_EXHIBIT ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_STATE ~ UsageDeclaration?
+        KW_STATE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ StateBody
 }
 
@@ -939,8 +1232,8 @@ ConstraintUsage = {
 
 AssertConstraintUsage = {
     OccurrenceUsagePrefix ~ KW_ASSERT ~ KW_NOT? ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart?
+        KW_CONSTRAINT ~ UsageDeclaration? ~ ValuePart?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ CalculationBody
 }
 
@@ -950,8 +1243,8 @@ RequirementUsage = {
 
 SatisfyRequirementUsage = {
     OccurrenceUsagePrefix ~ KW_ASSERT? ~ KW_NOT? ~ KW_SATISFY ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_REQUIREMENT ~ UsageDeclaration?
+        KW_REQUIREMENT ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ (KW_BY ~ SatisfactionSubjectMember)? ~ RequirementBody
 }
 
@@ -983,8 +1276,8 @@ UseCaseUsage = {
 
 IncludeUseCaseUsage = {
     OccurrenceUsagePrefix ~ KW_INCLUDE ~ (
-        OwnedReferenceSubsetting ~ FeatureSpecializationPart?
-        | KW_USE ~ KW_CASE ~ UsageDeclaration?
+        KW_USE ~ KW_CASE ~ UsageDeclaration?
+        | OwnedReferenceSubsetting ~ FeatureSpecializationPart?
     ) ~ ValuePart? ~ CaseBody
 }
 
@@ -1007,13 +1300,60 @@ ExtendedUsage = {
 }
 
 // =============================================================================
+// KERML FEATURE USAGES (for standard library parsing)
+// =============================================================================
+
+// KerML Step: [modifiers] step [name] [: Type] [= value] { ... } | ;
+StepUsage = {
+    UsagePrefix ~ KW_STEP ~ UsageDeclaration? ~ ValuePart? ~ DefinitionBody
+}
+
+// KerML Expression: [modifiers] expr [name] [: Type] [= value] { ... } | ;
+ExpressionUsage = {
+    UsagePrefix ~ KW_EXPR ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
+}
+
+// KerML BooleanExpression: [modifiers] bool [name] [: Type] [= value] { ... } | ;
+BooleanExpressionUsage = {
+    UsagePrefix ~ KW_BOOL ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
+}
+
+// KerML Invariant: [modifiers] inv [true|false] [name] [: Type] [= value] { ... } | ;
+InvariantUsage = {
+    UsagePrefix ~ KW_INV ~ (KW_TRUE | KW_FALSE)? ~ UsageDeclaration? ~ ValuePart? ~ FunctionBody
+}
+
+// =============================================================================
 // FEATURES
 // =============================================================================
 
+// FeatureDeclaration matches xtext:
+// Identification FeatureSpecializationPart? | FeatureSpecializationPart
+// Note: FeatureSpecializationPart first to handle contextual keywords (redefines, etc.)
+// When input starts with specialization syntax (:, :>, :>>, etc.), match anonymous feature.
+// Otherwise, match Identification with optional specialization.
+// FeatureRelationshipPart* is appended for chains, inverse of, featured by
 FeatureDeclaration = {
-    Identification ~ FeatureSpecializationPart?
-    | FeatureSpecializationPart
+    FeatureSpecializationPart ~ FeatureRelationshipPart*
+    | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
 }
+
+// KerML Feature Relationship Parts (chains, inverse of, featured by)
+// These follow the FeatureSpecializationPart in FeatureDeclaration
+FeatureRelationshipPart = {
+    ChainingPart
+    | InvertingPart
+    | TypeFeaturingPart
+}
+
+// chains <qualified-name> | chains <feature-chain>
+ChainingPart = { KW_CHAINS ~ (OwnedFeatureChain | QualifiedName) }
+
+// inverse of <feature>
+InvertingPart = { KW_INVERSE ~ KW_OF ~ (OwnedFeatureChain | QualifiedName) }
+
+// featured by <type> [, <type>]*
+TypeFeaturingPart = { KW_FEATURED ~ KW_BY ~ QualifiedName ~ ("," ~ QualifiedName)* }
 
 FeatureSpecializationPart = {
     FeatureSpecialization+ ~ (MultiplicityPart ~ FeatureSpecialization*)?
@@ -1036,7 +1376,8 @@ FeatureTyping = { OwnedFeatureTyping | ConjugatedPortTyping }
 
 OwnedFeatureTyping = { FeatureType }
 
-FeatureType = { QualifiedName | OwnedFeatureChain }
+// OwnedFeatureChain first - longer match (a.b.c) vs QualifiedName (a or A::B)
+FeatureType = { OwnedFeatureChain | QualifiedName }
 
 ConjugatedPortTyping = { "~" ~ QualifiedName }
 
@@ -1044,21 +1385,21 @@ Subsettings = { Subsets ~ ("," ~ OwnedSubsetting)* }
 
 Subsets = { SubsetsToken ~ OwnedSubsetting }
 
-OwnedSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedSubsetting = { OwnedFeatureChain | QualifiedName }
 
 References_ = { ReferencesToken ~ OwnedReferenceSubsetting }
 
-OwnedReferenceSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedReferenceSubsetting = { OwnedFeatureChain | QualifiedName }
 
 Crosses = { CrossesToken ~ OwnedCrossSubsetting }
 
-OwnedCrossSubsetting = { QualifiedName | OwnedFeatureChain }
+OwnedCrossSubsetting = { OwnedFeatureChain | QualifiedName }
 
 Redefinitions = { Redefines ~ ("," ~ OwnedRedefinition)* }
 
 Redefines = { RedefinesToken ~ OwnedRedefinition }
 
-OwnedRedefinition = { QualifiedName | OwnedFeatureChain }
+OwnedRedefinition = { OwnedFeatureChain | QualifiedName }
 
 // Feature chains
 OwnedFeatureChain = { FeatureChain }
@@ -1208,7 +1549,9 @@ AcceptParameterPart = {
 PayloadParameterMember = { PayloadParameter }
 
 PayloadParameter = {
-    Identification? ~ TriggerValuePart
+    // Prevent Identification from consuming trigger keywords (at/after/when)
+    // Use negative lookahead: if next token is TriggerKind, don't match as identifier
+    (!TriggerKind ~ Identification)? ~ TriggerValuePart
     | Identification? ~ PayloadFeatureSpecializationPart ~ ValuePart?
     | Identification ~ ValuePart?
 }
@@ -1234,7 +1577,9 @@ AssignmentNode = {
     KW_ASSIGN ~ FeatureChainMember ~ ":=" ~ NodeParameterMember ~ ActionBody
 }
 
-FeatureChainMember = { QualifiedName | OwnedFeatureChain }
+// OwnedFeatureChain must come first - it's a longer match (a.b.c)
+// while QualifiedName only handles a single name or A::B paths
+FeatureChainMember = { OwnedFeatureChain | QualifiedName }
 
 TerminateNode = {
     ActionNodePrefix ~ KW_TERMINATE ~ NodeParameterMember? ~ ActionBody
@@ -1290,7 +1635,9 @@ ActionNodeBody = { ";" | "{" ~ AnnotatingMember* ~ "}" }
 // =============================================================================
 
 TransitionUsage = {
-    KW_TRANSITION ~ (UsageDeclaration? ~ KW_FIRST)? ~
+    KW_TRANSITION ~
+    // Try keyword alternatives before TransitionSourceMember can consume them
+    (UsageDeclaration ~ KW_FIRST | KW_FIRST)? ~
     TransitionSourceMember ~
     TriggerActionMember? ~
     GuardExpressionMember? ~
@@ -1309,13 +1656,158 @@ GuardExpressionMember = { KW_IF ~ OwnedExpression }
 
 EffectBehaviorMember = { KW_DO ~ EffectBehaviorUsage }
 
+// EffectBehaviorUsage: Action after 'do' in transitions
+// Matches xtext: EmptyActionUsage | PerformedActionUsage ( '{' ActionBodyItem* '}' )?
+// Supports patterns like: do action undockFromStation : UndockFromStation { ... }
 EffectBehaviorUsage = {
-    UsageDeclaration? ~ ("{" ~ ActionBodyItem* ~ "}")?
+    EffectPerformedActionUsage ~ ("{" ~ ActionBodyItem* ~ "}")?
+    | ("{" ~ ActionBodyItem* ~ "}")?  // Empty action body
+}
+
+// EffectPerformedActionUsage: Performed action in effect context
+// Matches xtext PerformedActionUsage with PerformActionUsageDeclaration
+EffectPerformedActionUsage = {
+    KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+    | OwnedReferenceSubsetting ~ FeatureSpecializationPart? ~ ValuePart?
+    | AcceptNodeDeclaration
+    | SendNodeDeclaration
+    | AssignmentNodeDeclaration
 }
 
 TransitionSuccessionMember = { TransitionSuccession }
 
 TransitionSuccession = { ConnectorEndMember }
+
+// =============================================================================
+// TARGET SUCCESSIONS (for action chaining with 'then')
+// =============================================================================
+
+// TargetSuccessionMember: [visibility] ActionTargetSuccession
+// Used after actions in ActionBodyItem to chain with 'then'
+TargetSuccessionMember = { Visibility? ~ ActionTargetSuccession }
+
+// ActionTargetSuccession: (TargetSuccession | GuardedTargetSuccession | DefaultTargetSuccession)
+// Returns a Usage that contains the succession relationship
+// The body is either inline with the target or follows as UsageBody
+ActionTargetSuccession = {
+    TargetSuccession
+    | GuardedTargetSuccession
+    | DefaultTargetSuccession
+}
+
+// TargetSuccession: [multiplicity?] 'then' target [body]
+// The target can be:
+// - A reference to an action: then done;
+// - An inline action usage: then action a { }
+// - A perform action: then perform body;
+// - An assignment: then assign x := 1;
+// - An inline while/for loop: then action whileLoop while ...
+TargetSuccession = {
+    OwnedMultiplicity? ~ KW_THEN ~ SuccessionTarget
+}
+
+// GuardedTargetSuccession: if condition then target [body]
+GuardedTargetSuccession = {
+    GuardExpressionMember ~ KW_THEN ~ SuccessionTarget
+}
+
+// DefaultTargetSuccession: else target [body]
+DefaultTargetSuccession = {
+    KW_ELSE ~ SuccessionTarget
+}
+
+// SuccessionTarget: The target of a succession with its body
+// Can be an inline action node or a simple target with UsageBody
+SuccessionTarget = {
+    // Inline while loop: then action whileLoop while ... { }
+    SuccessionWhileLoopNode
+    // Inline for loop: then action forLoop for ... { }
+    | SuccessionForLoopNode
+    // Inline if node: then action ifAction if ... { }
+    | SuccessionIfNode
+    // Portion usages: then snapshot x; then timeslice y { }
+    | SuccessionPortionUsage ~ UsageBody
+    // State usage: then state x { }
+    | SuccessionStateUsage ~ UsageBody
+    // Action nodes with simple body:
+    // - perform body;
+    // - assign x := 1;
+    | SuccessionActionNodeDeclaration ~ UsageBody
+    // Full action usage: then [private] action a { }
+    | SuccessionActionUsageDeclaration ~ UsageBody
+    // Simple reference: then done;
+    | ConnectorEndMember ~ UsageBody
+}
+
+// SuccessionWhileLoopNode: WhileLoopNode as succession target
+// Pattern: [visibility] [action name] while/loop ... { }
+SuccessionWhileLoopNode = {
+    SuccessionActionNodePrefix ~
+    (KW_WHILE ~ ExpressionParameterMember | KW_LOOP) ~
+    ActionBodyParameterMember ~
+    (KW_UNTIL ~ ExpressionParameterMember ~ ";")?
+}
+
+// SuccessionForLoopNode: ForLoopNode as succession target
+// Pattern: [visibility] [action name] for ... { }
+SuccessionForLoopNode = {
+    SuccessionActionNodePrefix ~
+    KW_FOR ~ ForVariableDeclarationMember ~
+    KW_IN ~ NodeParameterMember ~
+    ActionBodyParameterMember
+}
+
+// SuccessionIfNode: IfNode as succession target
+// Pattern: [visibility] [action name] if ... { } [else ...]
+SuccessionIfNode = {
+    SuccessionActionNodePrefix ~
+    KW_IF ~ ExpressionParameterMember ~
+    ActionBodyParameterMember ~
+    (KW_ELSE ~ (ActionBodyParameterMember | IfNodeParameterMember))?
+}
+
+// SuccessionActionNodePrefix: Prefix for action nodes in succession
+// Includes optional visibility and action declaration
+SuccessionActionNodePrefix = { Visibility? ~ ActionNodeUsageDeclaration? }
+
+// SuccessionActionNodeDeclaration: Action node declarations (without body)
+SuccessionActionNodeDeclaration = {
+    PerformActionNodePrefix ~ OwnedReferenceSubsetting ~ FeatureSpecializationPart? ~ ValuePart?
+    | PerformActionNodePrefix ~ KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+    | AssignmentNodeDeclaration
+    | SendNodeDeclaration
+    | AcceptNodeDeclaration
+}
+
+// PerformActionNodePrefix captures: [visibility] perform
+PerformActionNodePrefix = { Visibility? ~ KW_PERFORM }
+
+// AssignmentNodeDeclaration: assign target := value
+AssignmentNodeDeclaration = { Visibility? ~ KW_ASSIGN ~ FeatureChainMember ~ ":=" ~ NodeParameterMember }
+
+// SendNodeDeclaration: send value [via port] [to target]
+SendNodeDeclaration = { Visibility? ~ KW_SEND ~ NodeParameterMember ~ (KW_VIA ~ NodeParameterMember)? ~ (KW_TO ~ NodeParameterMember)? }
+
+// AcceptNodeDeclaration: accept payload [via port]
+AcceptNodeDeclaration = { Visibility? ~ KW_ACCEPT ~ AcceptParameterPart }
+
+// SuccessionActionUsageDeclaration: Action usage declaration (without body)
+// Handles: then [private] action a
+SuccessionActionUsageDeclaration = {
+    Visibility? ~ KW_ACTION ~ UsageDeclaration? ~ ValuePart?
+}
+
+// SuccessionPortionUsage: Portion usage (snapshot/timeslice) in succession
+// Handles: then snapshot x, then timeslice y
+SuccessionPortionUsage = {
+    Visibility? ~ PortionKind ~ UsageDeclaration? ~ ValuePart?
+}
+
+// SuccessionStateUsage: State usage in succession
+// Handles: then state x
+SuccessionStateUsage = {
+    Visibility? ~ KW_STATE ~ UsageDeclaration? ~ ValuePart?
+}
 
 // =============================================================================
 // EXPRESSIONS
@@ -1328,9 +1820,10 @@ OwnedExpressionMember = { OwnedExpression }
 OwnedExpressionReference = { OwnedExpressionMember }
 
 // Conditional Expressions
+// ConcreteConditionalExpression must come first - otherwise "if" matches as identifier
 ConditionalExpression = {
-    NullCoalescingExpression
-    | ConcreteConditionalExpression
+    ConcreteConditionalExpression
+    | NullCoalescingExpression
 }
 
 ConcreteConditionalExpression = {
@@ -1367,8 +1860,10 @@ XorExpression = {
     AndExpression ~ (KW_XOR ~ AndExpression)*
 }
 
+// AndExpression: supports && (conditional), & (bitwise), and 'and' (keyword)
+// Note: "&&" must come BEFORE "&" (longer match first)
 AndExpression = {
-    EqualityExpression ~ (("&" ~ EqualityExpression) | (KW_AND ~ EqualityExpressionReference))*
+    EqualityExpression ~ (("&&" ~ EqualityExpressionReference) | ("&" ~ EqualityExpression) | (KW_AND ~ EqualityExpressionReference))*
 }
 
 EqualityExpressionReference = { EqualityExpressionMember }
@@ -1452,12 +1947,15 @@ PrimaryExpression = {
 }
 
 // Base Expressions
+// Note: InvocationExpression must come BEFORE FeatureReferenceExpression
+// because InvocationExpression is more specific (name + argument list)
+// and FeatureReferenceExpression would match just the name, leaving ()
 BaseExpression = {
     NullExpression
     | LiteralExpression
-    | FeatureReferenceExpression
     | MetadataAccessExpression
     | InvocationExpression
+    | FeatureReferenceExpression
     | BodyExpression
     | "(" ~ SequenceExpression ~ ")"
 }

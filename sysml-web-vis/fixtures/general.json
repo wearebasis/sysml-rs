@@ -1,0 +1,286 @@
+{
+  "version": "0.2",
+  "view": "GeneralView",
+  "viewMetadata": {
+    "title": "General View",
+    "subtitle": "Vehicle Project",
+    "subject": "VehicleProject",
+    "compartmentMode": "textual",
+    "labeling": {
+      "kindCase": "title",
+      "nameCase": "definitionUsage"
+    },
+    "legend": {
+      "title": "Legend",
+      "position": "bottom-right",
+      "items": [
+        "Definition: square corners",
+        "Usage: rounded corners",
+        "Typing: open arrow",
+        "Composition: filled diamond"
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "pkg-root",
+      "kind": "Package",
+      "name": "VehicleProject",
+      "icon": "PKG",
+      "position": { "x": 60, "y": 60 }
+    },
+    {
+      "id": "pkg-defs",
+      "kind": "Package",
+      "name": "Definitions",
+      "icon": "PKG",
+      "position": { "x": 300, "y": 60 }
+    },
+    {
+      "id": "pkg-reqs",
+      "kind": "Package",
+      "name": "Requirements",
+      "icon": "PKG",
+      "position": { "x": 540, "y": 60 }
+    },
+    {
+      "id": "part-def-vehicle",
+      "kind": "PartDefinition",
+      "name": "Vehicle",
+      "icon": "PART",
+      "position": { "x": 60, "y": 200 },
+      "compartments": [
+        {
+          "id": "parts",
+          "title": "parts",
+          "kind": "text",
+          "lines": ["engine: Engine", "battery: Battery"]
+        },
+        {
+          "id": "values",
+          "title": "values",
+          "kind": "text",
+          "lines": ["mass: 1200 kg", "range: 450 km"]
+        },
+        {
+          "id": "ops",
+          "title": "operations",
+          "kind": "text",
+          "lines": ["start()", "shutdown()"]
+        }
+      ]
+    },
+    {
+      "id": "part-def-engine",
+      "kind": "PartDefinition",
+      "name": "Engine",
+      "icon": "PART",
+      "position": { "x": 300, "y": 200 },
+      "compartments": [
+        {
+          "id": "values",
+          "title": "values",
+          "kind": "text",
+          "lines": ["power: 220 kW", "temp: 95 C"]
+        }
+      ]
+    },
+    {
+      "id": "part-usage-vehicle",
+      "kind": "PartUsage",
+      "name": "vehicle1",
+      "label": "Vehicle",
+      "icon": "PART",
+      "position": { "x": 60, "y": 320 }
+    },
+    {
+      "id": "req-def-safety",
+      "kind": "RequirementDefinition",
+      "name": "SafetyReq",
+      "icon": "REQ",
+      "position": { "x": 540, "y": 220 },
+      "compartments": [
+        {
+          "id": "req-text",
+          "title": "text",
+          "kind": "text",
+          "lines": ["id: SR-1", "text: Maintain safe operation during faults."]
+        }
+      ]
+    },
+    {
+      "id": "req-def-perf",
+      "kind": "RequirementDefinition",
+      "name": "PerfReq",
+      "icon": "REQ",
+      "position": { "x": 540, "y": 320 },
+      "compartments": [
+        {
+          "id": "req-text",
+          "title": "text",
+          "kind": "text",
+          "lines": ["id: PR-2", "text: Deliver rated performance."]
+        }
+      ]
+    },
+    {
+      "id": "meta-priority",
+      "kind": "MetadataDefinition",
+      "name": "PriorityTag",
+      "icon": "META",
+      "metaclass": "RequirementDefinition",
+      "metadata": "priority",
+      "position": { "x": 780, "y": 220 }
+    },
+    {
+      "id": "view-def",
+      "kind": "ViewDefinition",
+      "name": "SafetyView",
+      "icon": "VIEW",
+      "position": { "x": 300, "y": 360 }
+    },
+    {
+      "id": "viewpoint-def",
+      "kind": "ViewpointDefinition",
+      "name": "SafetyViewpoint",
+      "icon": "VIEWPOINT",
+      "position": { "x": 300, "y": 460 }
+    },
+    {
+      "id": "concern-def",
+      "kind": "ConcernDefinition",
+      "name": "SafetyConcern",
+      "icon": "CONCERN",
+      "position": { "x": 540, "y": 460 }
+    },
+    {
+      "id": "stakeholder-def",
+      "kind": "StakeholderDefinition",
+      "name": "Regulator",
+      "icon": "STAKE",
+      "position": { "x": 780, "y": 460 }
+    },
+    {
+      "id": "actor-user",
+      "kind": "Actor",
+      "name": "User",
+      "icon": "ACTOR",
+      "position": { "x": 60, "y": 560 }
+    },
+    {
+      "id": "usecase-select",
+      "kind": "UseCase",
+      "name": "Select Page",
+      "icon": "UC",
+      "position": { "x": 240, "y": 540 }
+    },
+    {
+      "id": "usecase-render",
+      "kind": "UseCase",
+      "name": "Render Page",
+      "icon": "UC",
+      "position": { "x": 440, "y": 540 }
+    },
+    {
+      "id": "usecase-validate",
+      "kind": "UseCase",
+      "name": "Validate Inputs",
+      "icon": "UC",
+      "position": { "x": 340, "y": 640 }
+    }
+  ],
+  "links": [
+    {
+      "id": "contains-root-defs",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-defs" }
+    },
+    {
+      "id": "contains-root-reqs",
+      "kind": "Contains",
+      "source": { "nodeId": "pkg-root" },
+      "target": { "nodeId": "pkg-reqs" }
+    },
+    {
+      "id": "import-defs-reqs",
+      "kind": "Import",
+      "source": { "nodeId": "pkg-defs" },
+      "target": { "nodeId": "pkg-reqs" }
+    },
+    {
+      "id": "type-vehicle",
+      "kind": "TypeOf",
+      "source": { "nodeId": "part-usage-vehicle" },
+      "target": { "nodeId": "part-def-vehicle" }
+    },
+    {
+      "id": "specialize-engine",
+      "kind": "Specialization",
+      "source": { "nodeId": "part-def-engine" },
+      "target": { "nodeId": "part-def-vehicle" }
+    },
+    {
+      "id": "satisfy-safety",
+      "kind": "Satisfy",
+      "source": { "nodeId": "part-usage-vehicle" },
+      "target": { "nodeId": "req-def-safety" }
+    },
+    {
+      "id": "verify-perf",
+      "kind": "Verify",
+      "source": { "nodeId": "part-def-engine" },
+      "target": { "nodeId": "req-def-perf" }
+    },
+    {
+      "id": "derive-perf-safety",
+      "kind": "Derive",
+      "source": { "nodeId": "req-def-perf" },
+      "target": { "nodeId": "req-def-safety" }
+    },
+    {
+      "id": "allocate-perf",
+      "kind": "Allocate",
+      "source": { "nodeId": "part-def-engine" },
+      "target": { "nodeId": "req-def-safety" }
+    },
+    {
+      "id": "viewpoint-link",
+      "kind": "Viewpoint",
+      "source": { "nodeId": "view-def" },
+      "target": { "nodeId": "viewpoint-def" }
+    },
+    {
+      "id": "concern-link",
+      "kind": "Concern",
+      "source": { "nodeId": "viewpoint-def" },
+      "target": { "nodeId": "concern-def" }
+    },
+    {
+      "id": "stakeholder-link",
+      "kind": "Stakeholder",
+      "source": { "nodeId": "concern-def" },
+      "target": { "nodeId": "stakeholder-def" }
+    },
+    {
+      "id": "usecase-association",
+      "kind": "Association",
+      "source": { "nodeId": "actor-user" },
+      "target": { "nodeId": "usecase-select" }
+    },
+    {
+      "id": "usecase-include",
+      "kind": "Include",
+      "source": { "nodeId": "usecase-select" },
+      "target": { "nodeId": "usecase-render" },
+      "labels": [{ "text": "<<include>>" }]
+    },
+    {
+      "id": "usecase-extend",
+      "kind": "Extend",
+      "source": { "nodeId": "usecase-validate" },
+      "target": { "nodeId": "usecase-select" },
+      "labels": [{ "text": "<<extend>>" }]
+    }
+  ]
+}
