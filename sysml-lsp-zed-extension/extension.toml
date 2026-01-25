@@ -7,10 +7,10 @@ repository = "https://github.com/wearebasis/sysml-rs"
 
 # Uses the in-repo sysml-ts Tree-sitter grammar.
 [grammars.sysml]
-repository = "file://.."
+repository = "file:///home/ricky/personal_repos/sysml-rs/sysml-rs"
 path = "sysml-ts/tree-sitter"
-rev = "HEAD"
+rev = "main"
 
 [language_servers.sysml-lsp]
 name = "SysML LSP"
-languages = ["SysML"]
+languages = ["SysML", "sysml"]
