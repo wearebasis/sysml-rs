@@ -22,11 +22,11 @@
 use std::collections::HashSet;
 use std::fmt;
 
-
 use crate::membership::props as membership_props;
 use crate::{Element, ElementKind, ModelGraph};
 use sysml_id::ElementId;
 use sysml_meta::Value;
+use sysml_span::{Diagnostic, Span};
 
 /// An error in the structural integrity of the model graph.
 #[derive(Debug, Clone, PartialEq)]
@@ -217,8 +217,282 @@ impl From<StructuralError> for sysml_span::Diagnostic {
             StructuralError::InvalidOwningMembership { .. } => "E008",
         };
 
-        sysml_span::Diagnostic::error(error.to_string())
-            .with_code(code.to_string())
+        sysml_span::Diagnostic::error(error.to_string()).with_code(code.to_string())
+    }
+}
+
+impl StructuralError {
+    /// Convert this error into a rich Diagnostic with spans and related locations when available.
+    pub fn to_diagnostic_with_graph(&self, graph: &ModelGraph) -> Diagnostic {
+        let code = match self {
+            StructuralError::OrphanElement { .. } => "E001",
+            StructuralError::OwnershipCycle { .. } => "E002",
+            StructuralError::DanglingMembershipRef { .. } => "E003",
+            StructuralError::RelationshipSourceTypeMismatch { .. } => "E004",
+            StructuralError::RelationshipTargetTypeMismatch { .. } => "E005",
+            StructuralError::DanglingRelationshipRef { .. } => "E006",
+            StructuralError::DanglingOwningMembership { .. } => "E007",
+            StructuralError::InvalidOwningMembership { .. } => "E008",
+        };
+
+        let mut diagnostic = Diagnostic::error(self.to_string()).with_code(code.to_string());
+
+        match self {
+            StructuralError::OrphanElement { element_id, .. } => {
+                if let Some(element) = graph.elements.get(element_id) {
+                    diagnostic = attach_primary_span(diagnostic, element.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "element: {}",
+                        describe_element(element, element_id)
+                    ));
+                    diagnostic = diagnostic.with_note(
+                        "only packages and membership elements may exist without owners",
+                    );
+                } else {
+                    diagnostic = diagnostic.with_note(format!("element id: {}", element_id));
+                }
+            }
+            StructuralError::OwnershipCycle { element_ids } => {
+                let mut chain = Vec::new();
+                let mut primary_span: Option<Span> = None;
+                for id in element_ids {
+                    if let Some(element) = graph.elements.get(id) {
+                        if primary_span.is_none() {
+                            primary_span = element.spans.first().cloned();
+                        }
+                        chain.push(describe_element(element, id));
+                        if let Some(span) = element.spans.first() {
+                            diagnostic = diagnostic.with_related(
+                                span.clone(),
+                                format!("cycle member: {}", describe_element_short(element, id)),
+                            );
+                        }
+                    } else {
+                        chain.push(format!("{}", id));
+                    }
+                }
+                if let Some(span) = primary_span {
+                    diagnostic = diagnostic.with_span(span);
+                }
+                if !chain.is_empty() {
+                    diagnostic = diagnostic.with_note(format!("cycle: {}", chain.join(" -> ")));
+                }
+            }
+            StructuralError::DanglingMembershipRef {
+                membership_id,
+                property,
+                missing_id,
+            } => {
+                if let Some(membership) = graph.elements.get(membership_id) {
+                    diagnostic = attach_primary_span(diagnostic, membership.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "membership: {}",
+                        describe_element(membership, membership_id)
+                    ));
+                    if let Some(owner_id) = &membership.owner {
+                        if let Some(owner) = graph.elements.get(owner_id) {
+                            if let Some(span) = owner.spans.first() {
+                                diagnostic = diagnostic.with_related(
+                                    span.clone(),
+                                    format!(
+                                        "owning namespace: {}",
+                                        describe_element_short(owner, owner_id)
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                }
+                diagnostic = diagnostic.with_notes([
+                    format!("property: {}", property),
+                    format!("missing element id: {}", missing_id),
+                ]);
+            }
+            StructuralError::RelationshipSourceTypeMismatch {
+                relationship_id,
+                relationship_kind,
+                source_id,
+                source_kind,
+                expected_kind,
+            } => {
+                if let Some(rel_elem) = graph.elements.get(relationship_id) {
+                    diagnostic = attach_primary_span(diagnostic, rel_elem.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "relationship element: {}",
+                        describe_element(rel_elem, relationship_id)
+                    ));
+                } else {
+                    diagnostic = diagnostic.with_note(format!(
+                        "relationship id: {} ({:?})",
+                        relationship_id, relationship_kind
+                    ));
+                }
+                if let Some(source_elem) = graph.elements.get(source_id) {
+                    if let Some(span) = source_elem.spans.first() {
+                        diagnostic = diagnostic.with_related(
+                            span.clone(),
+                            format!(
+                                "source element: {}",
+                                describe_element_short(source_elem, source_id)
+                            ),
+                        );
+                    }
+                }
+                diagnostic = diagnostic.with_notes([
+                    format!("expected source kind: {:?}", expected_kind),
+                    format!("actual source kind: {:?}", source_kind),
+                ]);
+            }
+            StructuralError::RelationshipTargetTypeMismatch {
+                relationship_id,
+                relationship_kind,
+                target_id,
+                target_kind,
+                expected_kind,
+            } => {
+                if let Some(rel_elem) = graph.elements.get(relationship_id) {
+                    diagnostic = attach_primary_span(diagnostic, rel_elem.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "relationship element: {}",
+                        describe_element(rel_elem, relationship_id)
+                    ));
+                } else {
+                    diagnostic = diagnostic.with_note(format!(
+                        "relationship id: {} ({:?})",
+                        relationship_id, relationship_kind
+                    ));
+                }
+                if let Some(target_elem) = graph.elements.get(target_id) {
+                    if let Some(span) = target_elem.spans.first() {
+                        diagnostic = diagnostic.with_related(
+                            span.clone(),
+                            format!(
+                                "target element: {}",
+                                describe_element_short(target_elem, target_id)
+                            ),
+                        );
+                    }
+                }
+                diagnostic = diagnostic.with_notes([
+                    format!("expected target kind: {:?}", expected_kind),
+                    format!("actual target kind: {:?}", target_kind),
+                ]);
+            }
+            StructuralError::DanglingRelationshipRef {
+                relationship_id,
+                endpoint,
+                missing_id,
+            } => {
+                if let Some(rel_elem) = graph.elements.get(relationship_id) {
+                    diagnostic = attach_primary_span(diagnostic, rel_elem.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "relationship element: {}",
+                        describe_element(rel_elem, relationship_id)
+                    ));
+                } else {
+                    diagnostic =
+                        diagnostic.with_note(format!("relationship id: {}", relationship_id));
+                }
+
+                if let Some(rel) = graph.relationships.get(relationship_id) {
+                    if let Some(source) = graph.elements.get(&rel.source) {
+                        if let Some(span) = source.spans.first() {
+                            diagnostic = diagnostic.with_related(
+                                span.clone(),
+                                format!(
+                                    "source element: {}",
+                                    describe_element_short(source, &rel.source)
+                                ),
+                            );
+                        }
+                    }
+                    if let Some(target) = graph.elements.get(&rel.target) {
+                        if let Some(span) = target.spans.first() {
+                            diagnostic = diagnostic.with_related(
+                                span.clone(),
+                                format!(
+                                    "target element: {}",
+                                    describe_element_short(target, &rel.target)
+                                ),
+                            );
+                        }
+                    }
+                }
+
+                diagnostic = diagnostic.with_notes([
+                    format!("missing {} id: {}", endpoint, missing_id),
+                    "relationship references must point to existing elements".to_string(),
+                ]);
+            }
+            StructuralError::DanglingOwningMembership {
+                element_id,
+                element_name: _,
+                missing_membership_id,
+            } => {
+                if let Some(element) = graph.elements.get(element_id) {
+                    diagnostic = attach_primary_span(diagnostic, element.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "element: {}",
+                        describe_element(element, element_id)
+                    ));
+                }
+                diagnostic = diagnostic.with_note(format!(
+                    "missing owning_membership id: {}",
+                    missing_membership_id
+                ));
+            }
+            StructuralError::InvalidOwningMembership {
+                element_id,
+                membership_id,
+                membership_kind,
+            } => {
+                if let Some(element) = graph.elements.get(element_id) {
+                    diagnostic = attach_primary_span(diagnostic, element.spans.first());
+                    diagnostic = diagnostic.with_note(format!(
+                        "element: {}",
+                        describe_element(element, element_id)
+                    ));
+                }
+                if let Some(membership) = graph.elements.get(membership_id) {
+                    if let Some(span) = membership.spans.first() {
+                        diagnostic = diagnostic.with_related(
+                            span.clone(),
+                            format!(
+                                "owning_membership element: {}",
+                                describe_element_short(membership, membership_id)
+                            ),
+                        );
+                    }
+                }
+                diagnostic = diagnostic.with_note(format!(
+                    "owning_membership must be a Membership, found {:?}",
+                    membership_kind
+                ));
+            }
+        }
+
+        diagnostic
+    }
+}
+
+fn attach_primary_span(mut diagnostic: Diagnostic, span: Option<&Span>) -> Diagnostic {
+    if let Some(span) = span {
+        diagnostic = diagnostic.with_span(span.clone());
+    }
+    diagnostic
+}
+
+fn describe_element(element: &Element, id: &ElementId) -> String {
+    match &element.name {
+        Some(name) => format!("{:?} '{}' ({})", element.kind, name, id),
+        None => format!("{:?} ({})", element.kind, id),
+    }
+}
+
+fn describe_element_short(element: &Element, id: &ElementId) -> String {
+    match &element.name {
+        Some(name) => format!("{:?} '{}'", element.kind, name),
+        None => format!("{:?} ({})", element.kind, id),
     }
 }
 
@@ -370,10 +644,7 @@ impl ModelGraph {
                 path_set.insert(current_id.clone());
 
                 // Move to owner
-                current = self
-                    .elements
-                    .get(&current_id)
-                    .and_then(|e| e.owner.clone());
+                current = self.elements.get(&current_id).and_then(|e| e.owner.clone());
             }
         }
         errors
@@ -404,7 +675,10 @@ impl ModelGraph {
             }
 
             // Check membershipOwningNamespace reference
-            if let Some(ns_ref) = element.props.get(membership_props::MEMBERSHIP_OWNING_NAMESPACE) {
+            if let Some(ns_ref) = element
+                .props
+                .get(membership_props::MEMBERSHIP_OWNING_NAMESPACE)
+            {
                 if let Some(ns_id) = ns_ref.as_ref() {
                     if !self.elements.contains_key(ns_id) {
                         errors.push(StructuralError::DanglingMembershipRef {
@@ -600,10 +874,7 @@ impl ModelGraph {
         expected_kind: ElementKind,
     ) {
         // Get target ElementId from the property value (if resolved)
-        let target_id: Option<&ElementId> = element
-            .props
-            .get(prop_name)
-            .and_then(|v| v.as_ref());
+        let target_id: Option<&ElementId> = element.props.get(prop_name).and_then(|v| v.as_ref());
 
         if let Some(tid) = target_id {
             if let Some(target) = self.elements.get(tid) {
@@ -633,10 +904,8 @@ impl ModelGraph {
         expected_kind: ElementKind,
     ) {
         // Get the list property value
-        let list_value: Option<&Vec<Value>> = element
-            .props
-            .get(prop_name)
-            .and_then(|v| v.as_list());
+        let list_value: Option<&Vec<Value>> =
+            element.props.get(prop_name).and_then(|v| v.as_list());
 
         if let Some(list) = list_value {
             for item in list {
@@ -747,7 +1016,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::DanglingOwningMembership { .. }))
             .collect();
-        assert!(!dangling_errors.is_empty(), "Expected dangling membership error");
+        assert!(
+            !dangling_errors.is_empty(),
+            "Expected dangling membership error"
+        );
     }
 
     #[test]
@@ -769,7 +1041,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::InvalidOwningMembership { .. }))
             .collect();
-        assert!(!invalid_errors.is_empty(), "Expected invalid membership type error");
+        assert!(
+            !invalid_errors.is_empty(),
+            "Expected invalid membership type error"
+        );
     }
 
     #[test]
@@ -806,7 +1081,11 @@ mod tests {
         graph.add_element(typing);
 
         let errors = graph.validate_relationship_types();
-        assert!(errors.is_empty(), "Valid FeatureTyping should pass: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Valid FeatureTyping should pass: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -832,7 +1111,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::RelationshipSourceTypeMismatch { .. }))
             .collect();
-        assert!(!source_errors.is_empty(), "Expected source type mismatch error for FeatureTyping owned by Package");
+        assert!(
+            !source_errors.is_empty(),
+            "Expected source type mismatch error for FeatureTyping owned by Package"
+        );
     }
 
     #[test]
@@ -858,7 +1140,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
             .collect();
-        assert!(!target_errors.is_empty(), "Expected target type mismatch error for FeatureTyping targeting Relationship");
+        assert!(
+            !target_errors.is_empty(),
+            "Expected target type mismatch error for FeatureTyping targeting Relationship"
+        );
     }
 
     #[test]
@@ -880,7 +1165,11 @@ mod tests {
         graph.add_element(spec);
 
         let errors = graph.validate_relationship_types();
-        assert!(errors.is_empty(), "Valid Specialization should pass: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Valid Specialization should pass: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -906,7 +1195,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
             .collect();
-        assert!(!target_errors.is_empty(), "Expected target type mismatch for Specialization targeting Element");
+        assert!(
+            !target_errors.is_empty(),
+            "Expected target type mismatch for Specialization targeting Element"
+        );
     }
 
     #[test]
@@ -928,7 +1220,11 @@ mod tests {
         graph.add_element(typing);
 
         let errors = graph.validate_relationship_types();
-        assert!(errors.is_empty(), "Subtypes should be compatible: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "Subtypes should be compatible: {:?}",
+            errors
+        );
     }
 
     #[test]
@@ -951,7 +1247,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
             .collect();
-        assert!(target_errors.is_empty(), "Unresolved targets should be skipped");
+        assert!(
+            target_errors.is_empty(),
+            "Unresolved targets should be skipped"
+        );
     }
 
     #[test]
@@ -963,8 +1262,7 @@ mod tests {
         let pkg_id = graph.add_element(pkg);
 
         // Create a base Relationship (no target property mapping)
-        let rel = Element::new_with_kind(ElementKind::Relationship)
-            .with_owner(pkg_id);
+        let rel = Element::new_with_kind(ElementKind::Relationship).with_owner(pkg_id);
         graph.add_element(rel);
 
         let errors = graph.validate_relationship_types();
@@ -973,7 +1271,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
             .collect();
-        assert!(target_errors.is_empty(), "Relationships without target property should be skipped");
+        assert!(
+            target_errors.is_empty(),
+            "Relationships without target property should be skipped"
+        );
     }
 
     // === Diagnostic Conversion Tests (Phase 5) ===
@@ -1044,11 +1345,17 @@ mod tests {
             },
         ];
 
-        let expected_codes = ["E001", "E002", "E003", "E004", "E005", "E006", "E007", "E008"];
+        let expected_codes = [
+            "E001", "E002", "E003", "E004", "E005", "E006", "E007", "E008",
+        ];
 
         for (error, expected_code) in errors.into_iter().zip(expected_codes.iter()) {
             let diag: Diagnostic = error.into();
-            assert_eq!(diag.code, Some(expected_code.to_string()), "Wrong code for error");
+            assert_eq!(
+                diag.code,
+                Some(expected_code.to_string()),
+                "Wrong code for error"
+            );
             assert!(diag.is_error());
         }
     }

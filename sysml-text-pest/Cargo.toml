@@ -31,3 +31,4 @@ sysml-codegen = { path = "../codegen" }
 default = []
 # Enable coverage tracking features for spec tests
 coverage = []
+pretty = ["sysml-span/pretty"]

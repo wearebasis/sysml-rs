@@ -211,7 +211,8 @@ impl ParseResult {
     pub fn validate_structure(&mut self) {
         let errors = self.graph.validate_structure();
         for error in errors {
-            self.diagnostics.push(error.into());
+            self.diagnostics
+                .push(error.to_diagnostic_with_graph(&self.graph));
         }
     }
 
@@ -233,7 +234,8 @@ impl ParseResult {
     pub fn validate_relationships(&mut self) {
         let errors = self.graph.validate_relationship_types();
         for error in errors {
-            self.diagnostics.push(error.into());
+            self.diagnostics
+                .push(error.to_diagnostic_with_graph(&self.graph));
         }
     }
 
@@ -419,13 +421,21 @@ mod tests {
         assert!(result.is_ok(), "No parse errors initially");
 
         result.validate_structure();
-        assert!(result.has_errors(), "Should have structural validation errors");
+        assert!(
+            result.has_errors(),
+            "Should have structural validation errors"
+        );
 
         // Check that the error has the correct code
-        let orphan_errors: Vec<_> = result.diagnostics.iter()
+        let orphan_errors: Vec<_> = result
+            .diagnostics
+            .iter()
             .filter(|d| d.code == Some("E001".to_string()))
             .collect();
-        assert!(!orphan_errors.is_empty(), "Should have orphan element error E001");
+        assert!(
+            !orphan_errors.is_empty(),
+            "Should have orphan element error E001"
+        );
     }
 
     #[test]
@@ -440,7 +450,10 @@ mod tests {
 
         let mut result = ParseResult::success(graph);
         result.validate_structure();
-        assert!(result.is_ok(), "Valid graph should have no validation errors");
+        assert!(
+            result.is_ok(),
+            "Valid graph should have no validation errors"
+        );
     }
 
     #[test]

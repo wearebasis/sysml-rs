@@ -119,6 +119,25 @@ let diag = Diagnostic::error("parse error")
     .with_note("hint: check syntax");
 ```
 
+### Pretty Rendering (feature: pretty)
+
+```rust
+use sysml_span::{Diagnostic, HashMapSourceProvider, Span};
+
+let source = "package Demo {\n  part def Engine;\n}\n";
+let span = Span::with_location("demo.sysml", 17, 23, 2, 8);
+let diag = Diagnostic::error("unexpected token")
+    .with_code("E002")
+    .with_span(span)
+    .with_note("expected 'part def'");
+
+let mut provider = HashMapSourceProvider::new();
+provider.insert("demo.sysml", source);
+
+let rendered = diag.render_snippet(&provider);
+println!("{rendered}");
+```
+
 ### Diagnostics Collection
 
 ```rust

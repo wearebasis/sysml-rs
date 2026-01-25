@@ -31,6 +31,11 @@ use std::fmt;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "pretty")]
+mod pretty;
+#[cfg(feature = "pretty")]
+pub use pretty::{DiagnosticRenderer, HashMapSourceProvider, SourceProvider};
+
 /// A span representing a range in a source file.
 ///
 /// # Examples
@@ -564,6 +569,12 @@ impl Diagnostic {
     /// ```
     pub fn is_error(&self) -> bool {
         self.severity.is_error()
+    }
+
+    /// Render this diagnostic using annotate-snippets (feature = "pretty").
+    #[cfg(feature = "pretty")]
+    pub fn render_snippet(&self, provider: &impl SourceProvider) -> String {
+        DiagnosticRenderer::new().render(self, provider)
     }
 }
 

@@ -6,11 +6,13 @@ license.workspace = true
 description = "Source locations, diagnostics, and severity levels for SysML v2"
 
 [features]
-default = []
+default = ["pretty"]
 serde = ["dep:serde"]
+pretty = ["dep:annotate-snippets"]
 
 [dependencies]
 serde = { workspace = true, optional = true }
+annotate-snippets = { version = "0.11", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

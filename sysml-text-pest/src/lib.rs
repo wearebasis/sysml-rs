@@ -106,17 +106,21 @@ impl PestParser {
             Ok(pairs) => {
                 // Convert pest pairs to ModelGraph
                 // Pass source text for O(log n) line/column lookups via LineIndex
-                let converter = ast::Converter::new(&file.path, self.include_spans, Some(&file.text));
+                let converter =
+                    ast::Converter::new(&file.path, self.include_spans, Some(&file.text));
                 match converter.convert(pairs, &mut graph) {
                     Ok(()) => {}
                     Err(e) => {
-                        diagnostics.push(Diagnostic::error(format!("Conversion error: {}", e)));
+                        let diagnostic = Diagnostic::error(format!("Conversion error: {}", e))
+                            .with_note(format!("file: {}", file.path))
+                            .with_note("AST conversion failed after parsing succeeded");
+                        diagnostics.push(diagnostic);
                     }
                 }
             }
             Err(e) => {
-                // Convert pest error to diagnostic
-                let diagnostic = self.pest_error_to_diagnostic(&file.path, e);
+                // Convert pest error to diagnostic with richer context
+                let diagnostic = self.pest_error_to_diagnostic(&file.path, &file.text, e);
                 diagnostics.push(diagnostic);
             }
         }
@@ -125,43 +129,81 @@ impl PestParser {
     }
 
     /// Convert a pest parsing error to a Diagnostic.
-    fn pest_error_to_diagnostic(&self, file: &str, error: pest::error::Error<Rule>) -> Diagnostic {
+    fn pest_error_to_diagnostic(
+        &self,
+        file: &str,
+        source: &str,
+        error: pest::error::Error<Rule>,
+    ) -> Diagnostic {
         let (line, col) = match error.line_col {
             pest::error::LineColLocation::Pos((line, col)) => (line as u32, col as u32),
             pest::error::LineColLocation::Span((line, col), _) => (line as u32, col as u32),
         };
 
-        let message = match &error.variant {
-            pest::error::ErrorVariant::ParsingError {
-                positives,
-                negatives,
-            } => {
-                let mut msg = String::new();
-                if !positives.is_empty() {
-                    msg.push_str("expected ");
-                    let expected: Vec<_> = positives.iter().map(|r| format!("{:?}", r)).collect();
-                    msg.push_str(&expected.join(", "));
-                }
-                if !negatives.is_empty() {
-                    if !msg.is_empty() {
-                        msg.push_str("; ");
-                    }
-                    msg.push_str("unexpected ");
-                    let unexpected: Vec<_> = negatives.iter().map(|r| format!("{:?}", r)).collect();
-                    msg.push_str(&unexpected.join(", "));
-                }
-                if msg.is_empty() {
-                    "syntax error".to_string()
-                } else {
-                    msg
-                }
-            }
-            pest::error::ErrorVariant::CustomError { message } => message.clone(),
+        let (mut start, mut end) = match error.location {
+            pest::error::InputLocation::Pos(pos) => (pos, pos.saturating_add(1)),
+            pest::error::InputLocation::Span((start, end)) => (start, end),
         };
 
-        Diagnostic::error(message)
-            .with_span(Span::with_location(file, 0, 0, line, col))
-            .with_code("E001")
+        let source_len = source.len();
+        start = start.min(source_len);
+        end = end.min(source_len);
+        if end <= start && start < source_len {
+            end = start + 1;
+        }
+
+        let mut diagnostic = match &error.variant {
+            pest::error::ErrorVariant::ParsingError { .. } => Diagnostic::error("syntax error"),
+            pest::error::ErrorVariant::CustomError { message } => {
+                Diagnostic::error(message.clone())
+            }
+        };
+
+        diagnostic = diagnostic
+            .with_span(Span::with_location(file, start, end, line, col))
+            .with_code("E001");
+
+        if let pest::error::ErrorVariant::ParsingError {
+            positives,
+            negatives,
+        } = &error.variant
+        {
+            let expected = format_rule_list(positives);
+            let unexpected = format_rule_list(negatives);
+
+            if !expected.is_empty() {
+                diagnostic = diagnostic.with_note(format!("expected: {}", expected));
+            }
+            if !unexpected.is_empty() {
+                diagnostic = diagnostic.with_note(format!("unexpected: {}", unexpected));
+            }
+        }
+
+        let line_text = error.line().trim();
+        if !line_text.is_empty() {
+            diagnostic = diagnostic.with_note(format!("near: {}", line_text));
+        }
+
+        diagnostic
+    }
+}
+
+fn format_rule_list(rules: &[Rule]) -> String {
+    if rules.is_empty() {
+        return String::new();
+    }
+
+    let mut names: Vec<String> = rules.iter().map(|r| format!("{:?}", r)).collect();
+    names.sort();
+    names.dedup();
+
+    const MAX_RULES: usize = 6;
+    if names.len() > MAX_RULES {
+        let remaining = names.len() - MAX_RULES;
+        names.truncate(MAX_RULES);
+        format!("{} (+{} more)", names.join(", "), remaining)
+    } else {
+        names.join(", ")
     }
 }
 
@@ -203,10 +245,7 @@ impl Parser for PestParser {
                 .collect()
         } else {
             // Sequential parsing for single files (avoids rayon overhead)
-            inputs
-                .iter()
-                .map(|file| self.parse_file(file))
-                .collect()
+            inputs.iter().map(|file| self.parse_file(file)).collect()
         };
 
         // Sequential merge phase (unavoidable - mutates single graph)
@@ -279,10 +318,7 @@ mod tests {
     #[test]
     fn parse_simple_package() {
         let parser = PestParser::new();
-        let files = vec![SysmlFile::new(
-            "test.sysml",
-            "package TestPackage { }",
-        )];
+        let files = vec![SysmlFile::new("test.sysml", "package TestPackage { }")];
         let result = parser.parse(&files);
 
         if result.has_errors() {
@@ -292,7 +328,10 @@ mod tests {
         }
 
         assert!(result.is_ok(), "Expected successful parse");
-        assert!(result.graph.element_count() >= 1, "Expected at least one element");
+        assert!(
+            result.graph.element_count() >= 1,
+            "Expected at least one element"
+        );
     }
 
     #[test]
@@ -474,10 +513,7 @@ mod tests {
     #[test]
     fn parse_syntax_error() {
         let parser = PestParser::new();
-        let files = vec![SysmlFile::new(
-            "test.sysml",
-            "package { invalid syntax",
-        )];
+        let files = vec![SysmlFile::new("test.sysml", "package { invalid syntax")];
         let result = parser.parse(&files);
 
         // Should have parse errors
@@ -489,10 +525,7 @@ mod tests {
     #[test]
     fn parse_with_validation_valid_package() {
         let parser = PestParser::new();
-        let files = vec![SysmlFile::new(
-            "test.sysml",
-            "package TestPackage { }",
-        )];
+        let files = vec![SysmlFile::new("test.sysml", "package TestPackage { }")];
         let result = parser.parse_with_validation(&files);
 
         // Valid package should have no errors
@@ -507,10 +540,7 @@ mod tests {
     #[test]
     fn parse_with_validation_runs_validation() {
         let parser = PestParser::new();
-        let files = vec![SysmlFile::new(
-            "test.sysml",
-            "package TestPackage { }",
-        )];
+        let files = vec![SysmlFile::new("test.sysml", "package TestPackage { }")];
 
         // parse_with_validation should complete without panic
         let result = parser.parse_with_validation(&files);

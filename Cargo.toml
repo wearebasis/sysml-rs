@@ -82,6 +82,8 @@ publish = false
 sysml-core = { path = "sysml-core" }
 sysml-vis = { path = "sysml-vis" }
 sysml-query = { path = "sysml-query" }
+sysml-text = { path = "sysml-text" }
+sysml-text-pest = { path = "sysml-text-pest", default-features = false }
 
 [profile.release-debug]
 inherits = "release"
@@ -94,3 +96,7 @@ path = "examples/model_builder.rs"
 [[example]]
 name = "visualization"
 path = "examples/visualization.rs"
+
+[[example]]
+name = "parse_sysml_model"
+path = "examples/parse_sysml_model.rs"

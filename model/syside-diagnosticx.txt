@@ -1,0 +1,144 @@
+
+=================================================================
+LSP Diagnostics for: sysml-rs.sysml
+Date: January 26, 2026
+Total Diagnostics: 26 (12 unique errors + duplicates/related)
+=================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ERROR GROUP 1: "Unexpected identifier" (12 occurrences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Line 43
+   Code: class def Span;
+   Error: Unexpected identifier.
+
+2. Line 44
+   Code: class def Diagnostic;
+   Error: Unexpected identifier.
+
+3. Line 60
+   Code: class def ModelGraph;
+   Error: Unexpected identifier.
+
+4. Line 62
+   Code: class def NameResolver :> Resolver;
+   Error: Unexpected identifier.
+
+5. Line 84
+   Code: class def SysmlFile;
+   Error: Unexpected identifier.
+
+6. Line 91
+   Code: class def PestParser :> sysml_text::Parser;
+   Error: Unexpected identifier.
+
+7. Line 98
+   Code: class def PilotSidecarParser :> sysml_text::Parser;
+   Error: Unexpected identifier.
+
+8. Line 105
+   Code: class def MonticoreSidecarParser :> sysml_text::Parser;
+   Error: Unexpected identifier.
+
+9. Line 112
+   Code: class def SysideSidecarParser :> sysml_text::Parser;
+   Error: Unexpected identifier.
+
+10. Line 158
+    Code: class def StateMachineRunner :> sysml_run::Runner;
+    Error: Unexpected identifier.
+
+11. Line 165
+    Code: class def ConstraintRunner :> sysml_run::Runner;
+    Error: Unexpected identifier.
+
+12. Line 183
+    Code: class def PostgresStore :> sysml_store::Store;
+    Error: Unexpected identifier.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ERROR GROUP 2: "Expected Feature element but found InterfaceDefinition" (8 occurrences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+13. Line 62
+    Code: class def NameResolver :> Resolver;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_core::Resolver)
+
+14. Line 91
+    Code: class def PestParser :> sysml_text::Parser;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_text::Parser)
+
+15. Line 98
+    Code: class def PilotSidecarParser :> sysml_text::Parser;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_text::Parser)
+
+16. Line 105
+    Code: class def MonticoreSidecarParser :> sysml_text::Parser;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_text::Parser)
+
+17. Line 112
+    Code: class def SysideSidecarParser :> sysml_text::Parser;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_text::Parser)
+
+18. Line 158
+    Code: class def StateMachineRunner :> sysml_run::Runner;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_run::Runner)
+
+19. Line 165
+    Code: class def ConstraintRunner :> sysml_run::Runner;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_run::Runner)
+
+20. Line 183
+    Code: class def PostgresStore :> sysml_store::Store;
+    Error: Expected Feature element but found InterfaceDefinition (SysmlRs::sysml_store::Store)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ERROR GROUP 3: "A concrete association must have at least two related elements" (4 occurrences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+21. Line 61
+    Code: interface def Resolver;
+    Error: A concrete association must have at least two related elements
+
+22. Line 83
+    Code: interface def Parser;
+    Error: A concrete association must have at least two related elements
+
+23. Line 151
+    Code: interface def Runner;
+    Error: A concrete association must have at least two related elements
+
+24. Line 176
+    Code: interface def Store;
+    Error: A concrete association must have at least two related elements
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNING GROUP: "Usages should only be typed by Classifiers" (3 occurrences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+25. Line 211
+    Code: part parser_impl : sysml_text_pest::PestParser;
+    Warning: Usages should only be typed by Classifiers, this will be upgraded to error in Syside v0.9
+
+26. Line 212
+    Code: part graph : sysml_core::ModelGraph;
+    Warning: Usages should only be typed by Classifiers, this will be upgraded to error in Syside v0.9
+
+27. Line 214
+    Code: part diagnostics : sysml_span::Diagnostic;
+    Warning: Usages should only be typed by Classifiers, this will be upgraded to error in Syside v0.9
+
+=================================================================
+SUMMARY
+=================================================================
+Total Errors: 24
+Total Warnings: 3
+
+Error Categories:
+  - "Unexpected identifier": 12 instances
+  - "Expected Feature element but found InterfaceDefinition": 8 instances
+  - "A concrete association must have at least two related elements": 4 instances
+
+Note: The LSP server currently running appears to be from the SysML 2LS / Syside project,
+not the sysml-rs parser implementation.

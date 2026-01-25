@@ -460,10 +460,7 @@ impl ScopeTable {
     }
 
     /// Try looking up a name in a HashMap, also checking quoted/unquoted variants.
-    fn lookup_with_quote_variants<'a, V>(
-        map: &'a HashMap<String, V>,
-        name: &str,
-    ) -> Option<&'a V> {
+    fn lookup_with_quote_variants<'a, V>(map: &'a HashMap<String, V>, name: &str) -> Option<&'a V> {
         // Try exact match first
         if let Some(v) = map.get(name) {
             return Some(v);
@@ -746,10 +743,14 @@ impl<'a> ResolutionContext<'a> {
     /// table avoids rebuilding inherited/imported lookups on every call.
     pub fn get_full_scope_table(&mut self, namespace_id: &ElementId) -> &ScopeTable {
         // Check if we need to populate inherited/imported
-        let needs_inherited = self.scope_tables.get(namespace_id)
+        let needs_inherited = self
+            .scope_tables
+            .get(namespace_id)
             .map(|t| !t.has_inherited_populated())
             .unwrap_or(true);
-        let needs_imported = self.scope_tables.get(namespace_id)
+        let needs_imported = self
+            .scope_tables
+            .get(namespace_id)
             .map(|t| !t.has_imported_populated())
             .unwrap_or(true);
 
@@ -1217,7 +1218,10 @@ impl<'a> ResolutionContext<'a> {
             }
 
             // Get parent ID while we have immutable borrow
-            (false, self.graph.owner_of(namespace_id).map(|e| e.id.clone()))
+            (
+                false,
+                self.graph.owner_of(namespace_id).map(|e| e.id.clone()),
+            )
         };
 
         // 4. PARENT: Walk up to parent namespace
@@ -1480,10 +1484,7 @@ impl<'a> ResolutionContext<'a> {
             if bytes[i] == b'\'' {
                 in_quotes = !in_quotes;
                 i += 1;
-            } else if !in_quotes
-                && i + 1 < bytes.len()
-                && bytes[i] == b':'
-                && bytes[i + 1] == b':'
+            } else if !in_quotes && i + 1 < bytes.len() && bytes[i] == b':' && bytes[i + 1] == b':'
             {
                 if i > start {
                     segments.push(&qname[start..i]);
@@ -1805,7 +1806,11 @@ impl<'a> ResolutionContext<'a> {
     /// Search through supertype chains to find a feature by name.
     ///
     /// This is used when the normal scope table has excluded a name due to redefinition.
-    fn search_supertypes_for_feature(&mut self, type_id: &ElementId, name: &str) -> Option<ElementId> {
+    fn search_supertypes_for_feature(
+        &mut self,
+        type_id: &ElementId,
+        name: &str,
+    ) -> Option<ElementId> {
         let mut visited = HashSet::new();
         self.search_supertypes_recursive(type_id, name, &mut visited)
     }
@@ -2009,33 +2014,53 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                 k if k == &ElementKind::Redefinition
                     || k.is_subtype_of(ElementKind::Redefinition) =>
                 {
-                    resolve_redefinition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_redefinition(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::ReferenceSubsetting
                     || k.is_subtype_of(ElementKind::ReferenceSubsetting) =>
                 {
-                    resolve_reference_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_reference_subsetting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
-                k if k == &ElementKind::Subsetting
-                    || k.is_subtype_of(ElementKind::Subsetting) =>
-                {
+                k if k == &ElementKind::Subsetting || k.is_subtype_of(ElementKind::Subsetting) => {
                     resolve_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
                 k if k == &ElementKind::FeatureTyping
                     || k.is_subtype_of(ElementKind::FeatureTyping) =>
                 {
-                    resolve_feature_typing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_typing(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 // Most general supertype last
                 k if k == &ElementKind::Specialization
                     || k.is_subtype_of(ElementKind::Specialization) =>
                 {
-                    resolve_specialization(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_specialization(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 // Dependency is a separate hierarchy
-                k if k == &ElementKind::Dependency
-                    || k.is_subtype_of(ElementKind::Dependency) =>
-                {
+                k if k == &ElementKind::Dependency || k.is_subtype_of(ElementKind::Dependency) => {
                     resolve_dependency(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
 
@@ -2045,34 +2070,48 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                 k if k == &ElementKind::Subclassification
                     || k.is_subtype_of(ElementKind::Subclassification) =>
                 {
-                    resolve_subclassification(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_subclassification(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // Conjugation (conjugatedType, originalType)
                 k if k == &ElementKind::Conjugation
                     || k.is_subtype_of(ElementKind::Conjugation) =>
                 {
-                    resolve_conjugation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_conjugation(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // TypeFeaturing (featuringType)
                 k if k == &ElementKind::TypeFeaturing
                     || k.is_subtype_of(ElementKind::TypeFeaturing) =>
                 {
-                    resolve_type_featuring(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_type_featuring(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // Disjoining (disjoiningType)
-                k if k == &ElementKind::Disjoining
-                    || k.is_subtype_of(ElementKind::Disjoining) =>
-                {
+                k if k == &ElementKind::Disjoining || k.is_subtype_of(ElementKind::Disjoining) => {
                     resolve_disjoining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
 
                 // Unioning (unioningType)
-                k if k == &ElementKind::Unioning
-                    || k.is_subtype_of(ElementKind::Unioning) =>
-                {
+                k if k == &ElementKind::Unioning || k.is_subtype_of(ElementKind::Unioning) => {
                     resolve_unioning(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
 
@@ -2080,34 +2119,56 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                 k if k == &ElementKind::Intersecting
                     || k.is_subtype_of(ElementKind::Intersecting) =>
                 {
-                    resolve_intersecting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_intersecting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // Differencing (differencingType)
                 k if k == &ElementKind::Differencing
                     || k.is_subtype_of(ElementKind::Differencing) =>
                 {
-                    resolve_differencing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_differencing(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // FeatureInverting (invertingFeature)
                 k if k == &ElementKind::FeatureInverting
                     || k.is_subtype_of(ElementKind::FeatureInverting) =>
                 {
-                    resolve_feature_inverting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_inverting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // FeatureChaining (crossedFeature)
                 k if k == &ElementKind::FeatureChaining
                     || k.is_subtype_of(ElementKind::FeatureChaining) =>
                 {
-                    resolve_feature_chaining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_chaining(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 // Annotation (annotatedElement)
-                k if k == &ElementKind::Annotation
-                    || k.is_subtype_of(ElementKind::Annotation) =>
-                {
+                k if k == &ElementKind::Annotation || k.is_subtype_of(ElementKind::Annotation) => {
                     resolve_annotation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
 
@@ -2125,7 +2186,13 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                 k if k == &ElementKind::ConjugatedPortDefinition
                     || k.is_subtype_of(ElementKind::ConjugatedPortDefinition) =>
                 {
-                    resolve_conjugated_port_definition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_conjugated_port_definition(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
 
                 _ => {}
@@ -2146,19 +2213,7 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
 
     // Record unresolved references as diagnostics
     for (element_id, prop_name, unresolved_name) in unresolved {
-        let span = graph
-            .get_element(&element_id)
-            .and_then(|e| e.spans.first().cloned());
-
-        let mut diag = Diagnostic::error(format!(
-            "Unresolved reference '{}' for property '{}'",
-            unresolved_name, prop_name
-        ));
-
-        if let Some(s) = span {
-            diag = diag.with_span(s);
-        }
-
+        let diag = build_unresolved_diagnostic(graph, &element_id, &prop_name, &unresolved_name);
         result.diagnostics.push(diag);
         result.unresolved_count += 1;
     }
@@ -2217,92 +2272,152 @@ pub fn resolve_references_excluding(
                 k if k == &ElementKind::Redefinition
                     || k.is_subtype_of(ElementKind::Redefinition) =>
                 {
-                    resolve_redefinition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_redefinition(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::ReferenceSubsetting
                     || k.is_subtype_of(ElementKind::ReferenceSubsetting) =>
                 {
-                    resolve_reference_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_reference_subsetting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
-                k if k == &ElementKind::Subsetting
-                    || k.is_subtype_of(ElementKind::Subsetting) =>
-                {
+                k if k == &ElementKind::Subsetting || k.is_subtype_of(ElementKind::Subsetting) => {
                     resolve_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
                 k if k == &ElementKind::FeatureTyping
                     || k.is_subtype_of(ElementKind::FeatureTyping) =>
                 {
-                    resolve_feature_typing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_typing(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::Specialization
                     || k.is_subtype_of(ElementKind::Specialization) =>
                 {
-                    resolve_specialization(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_specialization(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
-                k if k == &ElementKind::Dependency
-                    || k.is_subtype_of(ElementKind::Dependency) =>
-                {
+                k if k == &ElementKind::Dependency || k.is_subtype_of(ElementKind::Dependency) => {
                     resolve_dependency(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
                 k if k == &ElementKind::Subclassification
                     || k.is_subtype_of(ElementKind::Subclassification) =>
                 {
-                    resolve_subclassification(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_subclassification(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::Conjugation
                     || k.is_subtype_of(ElementKind::Conjugation) =>
                 {
-                    resolve_conjugation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_conjugation(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::TypeFeaturing
                     || k.is_subtype_of(ElementKind::TypeFeaturing) =>
                 {
-                    resolve_type_featuring(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_type_featuring(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
-                k if k == &ElementKind::Disjoining
-                    || k.is_subtype_of(ElementKind::Disjoining) =>
-                {
+                k if k == &ElementKind::Disjoining || k.is_subtype_of(ElementKind::Disjoining) => {
                     resolve_disjoining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
-                k if k == &ElementKind::Unioning
-                    || k.is_subtype_of(ElementKind::Unioning) =>
-                {
+                k if k == &ElementKind::Unioning || k.is_subtype_of(ElementKind::Unioning) => {
                     resolve_unioning(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
                 k if k == &ElementKind::Intersecting
                     || k.is_subtype_of(ElementKind::Intersecting) =>
                 {
-                    resolve_intersecting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_intersecting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::Differencing
                     || k.is_subtype_of(ElementKind::Differencing) =>
                 {
-                    resolve_differencing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_differencing(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::FeatureInverting
                     || k.is_subtype_of(ElementKind::FeatureInverting) =>
                 {
-                    resolve_feature_inverting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_inverting(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 k if k == &ElementKind::FeatureChaining
                     || k.is_subtype_of(ElementKind::FeatureChaining) =>
                 {
-                    resolve_feature_chaining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_feature_chaining(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
-                k if k == &ElementKind::Annotation
-                    || k.is_subtype_of(ElementKind::Annotation) =>
-                {
+                k if k == &ElementKind::Annotation || k.is_subtype_of(ElementKind::Annotation) => {
                     resolve_annotation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
-                k if k == &ElementKind::Membership
-                    || k.is_subtype_of(ElementKind::Membership) =>
-                {
+                k if k == &ElementKind::Membership || k.is_subtype_of(ElementKind::Membership) => {
                     resolve_membership(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
                 }
                 k if k == &ElementKind::ConjugatedPortDefinition
                     || k.is_subtype_of(ElementKind::ConjugatedPortDefinition) =>
                 {
-                    resolve_conjugated_port_definition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_conjugated_port_definition(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut updates,
+                        &mut unresolved,
+                    );
                 }
                 _ => {}
             }
@@ -2321,19 +2436,7 @@ pub fn resolve_references_excluding(
 
     // Record unresolved references
     for (element_id, prop_name, unresolved_name) in unresolved {
-        let span = graph
-            .get_element(&element_id)
-            .and_then(|e| e.spans.first().cloned());
-
-        let mut diag = Diagnostic::error(format!(
-            "Unresolved reference '{}' for property '{}'",
-            unresolved_name, prop_name
-        ));
-
-        if let Some(s) = span {
-            diag = diag.with_span(s);
-        }
-
+        let diag = build_unresolved_diagnostic(graph, &element_id, &prop_name, &unresolved_name);
         result.diagnostics.push(diag);
         result.unresolved_count += 1;
     }
@@ -2366,6 +2469,79 @@ fn has_unresolved_refs(element: &crate::Element) -> bool {
         || element.props.contains_key(unresolved_props::CLIENT)
         || element.props.contains_key(unresolved_props::SUPPLIER)
         || element.props.contains_key(unresolved_props::CONJUGATED_PORT_DEFINITION)
+}
+
+fn build_unresolved_diagnostic(
+    graph: &ModelGraph,
+    element_id: &ElementId,
+    prop_name: &str,
+    unresolved_name: &str,
+) -> Diagnostic {
+    let mut diagnostic = Diagnostic::error(format!(
+        "Unresolved reference '{}' for property '{}'",
+        unresolved_name, prop_name
+    ))
+    .with_code("E200");
+
+    if let Some(element) = graph.get_element(element_id) {
+        if let Some(span) = element.spans.first() {
+            diagnostic = diagnostic.with_span(span.clone());
+        }
+
+        let element_label = match &element.name {
+            Some(name) => format!("{:?} '{}'", element.kind, name),
+            None => format!("{:?}", element.kind),
+        };
+        diagnostic = diagnostic.with_note(format!("in element: {}", element_label));
+
+        if let Some(qname) = graph.build_qualified_name(element_id) {
+            diagnostic = diagnostic.with_note(format!("qualified name: {}", qname));
+        }
+
+        if let Some(owner_id) = &element.owner {
+            if let Some(owner) = graph.get_element(owner_id) {
+                if let Some(owner_span) = owner.spans.first() {
+                    let owner_label = match &owner.name {
+                        Some(name) => format!("{:?} '{}'", owner.kind, name),
+                        None => format!("{:?}", owner.kind),
+                    };
+                    diagnostic = diagnostic.with_related(
+                        owner_span.clone(),
+                        format!("owner: {}", owner_label),
+                    );
+                }
+            }
+        }
+    }
+
+    if graph.library_packages().is_empty() && looks_like_stdlib_type(unresolved_name) {
+        diagnostic = diagnostic.with_note(
+            "standard library not loaded; load it to resolve built-in types like Anything/Integer/Real",
+        );
+    }
+
+    diagnostic = diagnostic.with_note("ensure the name is defined or imported in scope");
+    diagnostic
+}
+
+fn looks_like_stdlib_type(name: &str) -> bool {
+    if primitive_type_alias(name).is_some() {
+        return true;
+    }
+
+    matches!(
+        name,
+        "Anything"
+            | "DataValue"
+            | "Boolean"
+            | "Integer"
+            | "Real"
+            | "String"
+            | "Complex"
+            | "Rational"
+            | "Natural"
+            | "ScalarValues"
+    )
 }
 
 /// Resolve a Specialization element's general property.
@@ -3582,8 +3758,10 @@ mod tests {
         let base_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("BaseDef");
         let base_id = graph.add_owned_element(base_def, pkg_id.clone(), VisibilityKind::Public);
 
-        let derived_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
-        let derived_id = graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
+        let derived_def =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
+        let derived_id =
+            graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
 
         // Add specialization with unresolved reference
         create_specialization(&mut graph, &derived_id, "TestPkg::BaseDef");
@@ -3616,8 +3794,10 @@ mod tests {
         let pkg = Element::new_with_kind(ElementKind::Package).with_name("TestPkg");
         let pkg_id = graph.add_element(pkg);
 
-        let derived_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
-        let derived_id = graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
+        let derived_def =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
+        let derived_id =
+            graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
 
         // Add specialization referencing non-existent type
         create_specialization(&mut graph, &derived_id, "TestPkg::NonExistent");
@@ -3646,7 +3826,10 @@ mod tests {
 
         // Create a FeatureTyping element with unresolved type
         let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
-        typing.set_prop(unresolved_props::TYPE, Value::String("TestPkg::TypeDef".to_string()));
+        typing.set_prop(
+            unresolved_props::TYPE,
+            Value::String("TestPkg::TypeDef".to_string()),
+        );
         let _typing_id = graph.add_owned_element(typing, pkg_id.clone(), VisibilityKind::Public);
 
         // Run resolution
@@ -3684,15 +3867,20 @@ mod tests {
         let type_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("TypeDef");
         let type_id = graph.add_owned_element(type_def, pkg_id.clone(), VisibilityKind::Public);
 
-        let derived_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
-        let derived_id = graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
+        let derived_def =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
+        let derived_id =
+            graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
 
         // Add specialization
         create_specialization(&mut graph, &derived_id, "TestPkg::BaseDef");
 
         // Add FeatureTyping
         let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
-        typing.set_prop(unresolved_props::TYPE, Value::String("TestPkg::TypeDef".to_string()));
+        typing.set_prop(
+            unresolved_props::TYPE,
+            Value::String("TestPkg::TypeDef".to_string()),
+        );
         graph.add_owned_element(typing, pkg_id.clone(), VisibilityKind::Public);
 
         // Run resolution
@@ -3708,14 +3896,26 @@ mod tests {
             .owned_members(&derived_id)
             .filter(|e| e.kind == ElementKind::Specialization)
             .collect();
-        assert_eq!(specs[0].props.get(resolved_props::GENERAL).and_then(|v| v.as_ref()), Some(&base_id));
+        assert_eq!(
+            specs[0]
+                .props
+                .get(resolved_props::GENERAL)
+                .and_then(|v| v.as_ref()),
+            Some(&base_id)
+        );
 
         // Verify FeatureTyping was resolved
         let typings: Vec<_> = graph
             .owned_members(&pkg_id)
             .filter(|e| e.kind == ElementKind::FeatureTyping)
             .collect();
-        assert_eq!(typings[0].props.get(resolved_props::TYPE).and_then(|v| v.as_ref()), Some(&type_id));
+        assert_eq!(
+            typings[0]
+                .props
+                .get(resolved_props::TYPE)
+                .and_then(|v| v.as_ref()),
+            Some(&type_id)
+        );
     }
 
     #[test]
@@ -3731,15 +3931,20 @@ mod tests {
         let base_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("BaseDef");
         graph.add_owned_element(base_def, pkg_id.clone(), VisibilityKind::Public);
 
-        let derived_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
-        let derived_id = graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
+        let derived_def =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("DerivedDef");
+        let derived_id =
+            graph.add_owned_element(derived_def, pkg_id.clone(), VisibilityKind::Public);
 
         // Add resolvable specialization
         create_specialization(&mut graph, &derived_id, "TestPkg::BaseDef");
 
         // Add unresolvable FeatureTyping
         let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
-        typing.set_prop(unresolved_props::TYPE, Value::String("TestPkg::NonExistent".to_string()));
+        typing.set_prop(
+            unresolved_props::TYPE,
+            Value::String("TestPkg::NonExistent".to_string()),
+        );
         graph.add_owned_element(typing, pkg_id.clone(), VisibilityKind::Public);
 
         // Run resolution
@@ -3984,7 +4189,9 @@ mod tests {
         // Pure feature chains (contain '.' outside quotes, no '::')
         assert!(ResolutionContext::is_feature_chain("a.b"));
         assert!(ResolutionContext::is_feature_chain("a.b.c"));
-        assert!(ResolutionContext::is_feature_chain("vehicle.engine.pistons"));
+        assert!(ResolutionContext::is_feature_chain(
+            "vehicle.engine.pistons"
+        ));
 
         // Not feature chains
         assert!(!ResolutionContext::is_feature_chain("A::B"));
@@ -3992,9 +4199,11 @@ mod tests {
         assert!(!ResolutionContext::is_feature_chain("simple"));
         assert!(!ResolutionContext::is_feature_chain("'a.b'")); // Dot inside quotes
         assert!(!ResolutionContext::is_feature_chain("'some.path'")); // All inside quotes
-        // Mixed qualified name with dot - NOT a pure feature chain
+                                                                      // Mixed qualified name with dot - NOT a pure feature chain
         assert!(!ResolutionContext::is_feature_chain("A::B.c"));
-        assert!(!ResolutionContext::is_feature_chain("Package::Type.feature"));
+        assert!(!ResolutionContext::is_feature_chain(
+            "Package::Type.feature"
+        ));
     }
 
     #[test]
@@ -4011,8 +4220,7 @@ mod tests {
         assert_eq!(segments, vec!["single"]);
 
         // Quoted names with dots inside
-        let segments: Vec<_> =
-            ResolutionContext::split_feature_chain_segments("'a.b'.c").collect();
+        let segments: Vec<_> = ResolutionContext::split_feature_chain_segments("'a.b'.c").collect();
         assert_eq!(segments, vec!["'a.b'", "c"]);
 
         let segments: Vec<_> =
@@ -4043,8 +4251,11 @@ mod tests {
 
         // Use add_owned_element for engine feature (creates membership for scope resolution)
         let engine_feature = Element::new_with_kind(ElementKind::PartUsage).with_name("engine");
-        let engine_feature_id =
-            graph.add_owned_element(engine_feature, vehicle_pkg_id.clone(), VisibilityKind::Public);
+        let engine_feature_id = graph.add_owned_element(
+            engine_feature,
+            vehicle_pkg_id.clone(),
+            VisibilityKind::Public,
+        );
 
         // FeatureTyping: engine : Engine
         let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
@@ -4081,8 +4292,11 @@ mod tests {
 
         // Use add_owned_element for engine feature (creates membership for scope resolution)
         let engine_feature = Element::new_with_kind(ElementKind::PartUsage).with_name("engine");
-        let engine_feature_id =
-            graph.add_owned_element(engine_feature, vehicle_pkg_id.clone(), VisibilityKind::Public);
+        let engine_feature_id = graph.add_owned_element(
+            engine_feature,
+            vehicle_pkg_id.clone(),
+            VisibilityKind::Public,
+        );
 
         // FeatureTyping: engine : Engine
         let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
@@ -4173,8 +4387,7 @@ mod tests {
         let pkg_b = Element::new_with_kind(ElementKind::Package).with_name("PackageB");
         let pkg_b_id = graph.add_element(pkg_b);
 
-        let derived_def =
-            Element::new_with_kind(ElementKind::PartDefinition).with_name("Derived");
+        let derived_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("Derived");
         let derived_id =
             graph.add_owned_element(derived_def, pkg_b_id.clone(), VisibilityKind::Public);
 
@@ -4268,6 +4481,9 @@ mod tests {
         let resolved = ctx.resolve_name(&def_id, "feature");
 
         // Should find the feature (owned member found before inheritance)
-        assert!(resolved.is_some(), "Should not crash on circular inheritance");
+        assert!(
+            resolved.is_some(),
+            "Should not crash on circular inheritance"
+        );
     }
 }

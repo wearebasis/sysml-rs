@@ -134,7 +134,10 @@ fn extract_type_name(return_type: &str) -> Option<String> {
     }
     // Also handle simple type names
     if !return_type.is_empty()
-        && return_type.chars().next().map_or(false, |c| c.is_uppercase())
+        && return_type
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_uppercase())
     {
         return Some(return_type.to_string());
     }
@@ -301,7 +304,8 @@ pub fn validate_grammar_element_linkage(
     let all_pest_rules = extract_pest_element_rule_names(grammar_content);
 
     // Filter to likely element-producing rules
-    result.pest_element_rules = filter_element_producing_rules(&all_pest_rules, &result.element_kinds);
+    result.pest_element_rules =
+        filter_element_producing_rules(&all_pest_rules, &result.element_kinds);
 
     // Validate xtext return types against ElementKinds
     for (rule_name, return_type) in &result.xtext_element_rules {
@@ -360,7 +364,10 @@ pub fn validate_grammar_element_linkage(
 /// - FlowConnectionUsage -> FlowUsage
 /// - FlowConnectionDefinition -> FlowDefinition
 /// - DefaultReferenceUsage -> ReferenceUsage
-fn find_potential_element_kind(rule_name: &str, element_kinds: &BTreeSet<String>) -> Option<String> {
+fn find_potential_element_kind(
+    rule_name: &str,
+    element_kinds: &BTreeSet<String>,
+) -> Option<String> {
     // Known mappings
     let mappings: &[(&str, &str)] = &[
         ("FlowConnectionUsage", "FlowUsage"),
@@ -368,11 +375,28 @@ fn find_potential_element_kind(rule_name: &str, element_kinds: &BTreeSet<String>
         ("DefaultReferenceUsage", "ReferenceUsage"),
         ("IndividualUsage", "OccurrenceUsage"),
         ("PortionUsage", "OccurrenceUsage"),
+        ("SuccessionPortionUsage", "OccurrenceUsage"),
         ("SuccessionFlowUsage", "SuccessionFlowUsage"),
         ("ExtendedDefinition", "Definition"),
         ("ExtendedUsage", "Usage"),
         ("VariantReference", "ReferenceUsage"),
         ("LibraryPackage", "LibraryPackage"),
+        // Alias usages (Xtext returns different element kinds)
+        ("ActorUsage", "PartUsage"),
+        ("StakeholderUsage", "PartUsage"),
+        ("FramedConcernUsage", "ConcernUsage"),
+        ("SubjectUsage", "ReferenceUsage"),
+        ("PrefixMetadataUsage", "MetadataUsage"),
+        ("MetadataBodyUsage", "ReferenceUsage"),
+        ("RequirementConstraintUsage", "ConstraintUsage"),
+        ("ObjectiveRequirementUsage", "RequirementUsage"),
+        ("EffectBehaviorUsage", "ActionUsage"),
+        ("EffectPerformedActionUsage", "ActionUsage"),
+        ("StateActionUsage", "ActionUsage"),
+        ("TargetTransitionUsage", "TransitionUsage"),
+        ("ViewRenderingUsage", "RenderingUsage"),
+        ("MessageUsage", "FlowUsage"),
+        ("SuccessionStateUsage", "StateUsage"),
         // Action nodes
         ("SendNode", "SendActionUsage"),
         ("AcceptNode", "AcceptActionUsage"),

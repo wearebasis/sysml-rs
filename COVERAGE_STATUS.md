@@ -232,13 +232,13 @@ These require different fixes (expression parsing, custom library support).
 SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
 cargo test -p sysml-spec-tests corpus_coverage -- --ignored --nocapture
 
-# Full resolution tests (slow, ~3 minutes)
+# Quick smoke test (fast, 3-5 files)
 SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
-cargo test -p sysml-spec-tests corpus_resolution -- --ignored --nocapture
+cargo test -p sysml-spec-tests corpus_smoke_test -- --ignored --nocapture
 
-# Quick check (faster)
+# Full resolution tests (slow, multi-file + library)
 SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
-cargo test -p sysml-spec-tests corpus_resolution_quick -- --ignored --nocapture
+cargo test -p sysml-spec-tests corpus_resolution_multi_file -- --ignored --nocapture
 ```
 
 ---
@@ -252,6 +252,8 @@ cargo test -p sysml-spec-tests corpus_resolution_quick -- --ignored --nocapture
 | Resolution (with library) | **63.1%** | 70%+ | Medium | Near target |
 | Resolution (quick) | **85.1%** | 80%+ | - | ✅ ACHIEVED |
 | Grammar-Element linkage | 67% | 90% | Low | Future work |
+
+**Note:** The suite now uses `corpus_smoke_test` (fast) and `corpus_resolution_multi_file` (full) in place of the older per-file resolution tests. The metrics above remain as historical baselines.
 
 **Note:** Per-file resolution (63.1%) is inherently lower than multi-file (94.1%) because cross-file references cannot resolve when files are parsed independently.
 

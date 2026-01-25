@@ -101,23 +101,27 @@ note: first defined here
 ## Tasks & Tracking
 
 ### Phase 1 — API & Feature Flag
-- [ ] Add optional dependency on `annotate-snippets` in `sysml-span/Cargo.toml`.
-- [ ] Add `pretty` (or `annotate-snippets`) feature flag in `sysml-span`.
-- [ ] Decide on renderer API (module + trait + helpers).
+- [x] Add optional dependency on `annotate-snippets` in `sysml-span/Cargo.toml`.
+- [x] Add `pretty` (or `annotate-snippets`) feature flag in `sysml-span`.
+- [x] Decide on renderer API (module + trait + helpers).
+
+**Phase 1 decisions**
+- Feature name: `pretty` (gates annotate-snippets integration).
+- API shape: `DiagnosticRenderer` + `SourceProvider` (module-level types, feature-gated), with `render()`/`render_all()` helpers.
 
 ### Phase 2 — Renderer Implementation (sysml-span)
-- [ ] Implement `SourceProvider` trait and a simple `HashMap` provider.
-- [ ] Implement `DiagnosticRenderer` that:
-  - [ ] Maps `Diagnostic.severity` to annotate-snippets level.
-  - [ ] Uses `Diagnostic.span` for main label.
-  - [ ] Renders `Diagnostic.notes` as footers.
-  - [ ] Renders `RelatedLocation` entries as secondary slices.
-- [ ] Implement `render_all(diagnostics)` helper to batch render.
+- [x] Implement `SourceProvider` trait and a simple `HashMap` provider.
+- [x] Implement `DiagnosticRenderer` that:
+  - [x] Maps `Diagnostic.severity` to annotate-snippets level.
+  - [x] Uses `Diagnostic.span` for main label.
+  - [x] Renders `Diagnostic.notes` as footers.
+  - [x] Renders `RelatedLocation` entries as secondary slices.
+- [x] Implement `render_all(diagnostics)` helper to batch render.
 
 ### Phase 3 — Examples + Docs
-- [ ] Add a small example to `sysml-span/README.md`.
-- [ ] Add a new example under `sysml-span/examples/` that renders a few diagnostics.
-- [ ] Show how to use it from `sysml-text` ParseResult.
+- [x] Add a small example to `sysml-span/README.md`.
+- [x] Add a new example under `sysml-span/examples/` that renders a few diagnostics.
+- [x] Show how to use it from `sysml-text` ParseResult.
 
 ### Phase 4 — Integration Opt-In (Optional)
 - [ ] In `sysml-text-pest` example(s), optionally render diagnostics via the new renderer.
