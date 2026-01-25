@@ -1177,15 +1177,15 @@ See `COVERAGE_STATUS.md` for detailed tracking.
 
 ---
 
-### Phase 2e: Resolution Quality Improvements ✅ COMPLETE (94.1% achieved)
+### Phase 2e: Resolution Quality Improvements ✅ COMPLETE (98.9% achieved)
 
 **Goal**: Achieve 90%+ resolution rate with standard library loaded.
 
-**Current Status (2026-01-25)**:
+**Current Status (2026-01-26)**:
 | Test Mode | Resolved | Rate | Status |
 |-----------|----------|------|--------|
 | Single-file (no library) | 919/2146 | 42.8% | Baseline |
-| Multi-file (with library) | 893/949 | **94.1%** | ✅ Target exceeded |
+| Multi-file (with library) | 939/949 | **98.9%** | ✅ Target exceeded |
 | With library (per-file) | 595/943 | **63.1%** | ✅ Bug fixed |
 | Quick check | 40/47 | **85.1%** | ✅ Good |
 
@@ -1267,6 +1267,28 @@ The remaining 75 unresolved references are NOT cross-file redefinition timing is
 **Goal**: Fix numeric literals being parsed as unresolved references.
 
 **Problem**: Values like `5.0`, `100`, `true` were stored in `unresolved_value`, causing false "unresolved reference '5.0'" errors during resolution.
+
+#### 2e.5: Redefinition Resolution for Inherited Features ✅ COMPLETE (98.9%)
+
+**Goal**: Fix unresolved `redefinedFeature` references for inherited features.
+
+**Problem**: Redefinitions like `:>> id = value` failed to resolve because:
+1. Scope tables exclude inherited members that are being redefined (to prevent shadowing)
+2. `find_containing_type()` returned the redefining feature, not the owning type
+3. FeatureTyping relationships weren't traversed when searching supertypes
+
+**Implementation** (sysml-core/src/resolution/mod.rs):
+- [x] Added `resolve_redefined_feature()` - special resolution for redefinition targets
+- [x] Added `find_containing_type()` - finds owning Type, skipping Features
+- [x] Added `search_supertypes_recursive()` - walks Specialization AND FeatureTyping chains
+- [x] Added `resolve_qualified_name_relative()` - relative scoping for `A::B` patterns
+- [x] Updated `resolve_subsetting/reference_subsetting` to use `resolve_feature_reference()`
+
+**Results**: Resolution improved from 91.5% → **98.9%** (+71 references resolved)
+
+**Remaining 10 unresolved** (corpus edge cases):
+- 8 type references: Missing imports (`ShapeItems::*`) or name shadowing (`Drone` package vs part def)
+- 2 feature chain redefinitions: `:>> adoptiveParent_1.age` (complex scoping in requirements)
 
 **Implementation**:
 - [x] Added `is_literal_expression()` detection in `extraction.rs`
@@ -1358,7 +1380,7 @@ See `benchmarks/PERFORMANCE_NOTES.md` for detailed analysis. Key opportunities:
 | **2b** | Semantic model with relationships, ownership, properties | ✅ Complete |
 | **2c** | Corpus coverage, ElementKind coverage | ✅ MVP |
 | **2d** | Resolve `unresolved_*` refs to concrete ElementIds | ✅ Complete |
-| **2e** | 90%+ resolution with library, fix index rebuild bug | ✅ **94.1%** achieved |
+| **2e** | 90%+ resolution with library, fix index rebuild bug | ✅ **98.9%** achieved |
 | **2f** | Fix O(n²) line_col bottleneck with LineIndex | ✅ Complete |
 
 **Phase 2 Complete:**
