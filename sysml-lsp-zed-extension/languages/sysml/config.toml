@@ -1,0 +1,5 @@
+name = "SysML"
+grammar = "sysml"
+path_suffixes = ["sysml", "kerml"]
+line_comments = ["// "]
+block_comments = { start = "/*", end = "*/" }

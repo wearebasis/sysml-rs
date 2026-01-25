@@ -1,0 +1,80 @@
+=====================
+package-and-features
+=====================
+
+package Vehicle {
+  part def Engine : propulsion::EngineType;
+  part engine : Engine;
+  attribute def mass : Real;
+  attribute mass : Real;
+}
+
+---
+
+(source_file
+  (package_decl
+    name: (identifier)
+    (block
+      (part_def
+        name: (identifier)
+        (typing
+          type: (type_ref
+            (qualified_name
+              (identifier)
+              (identifier)))))
+      (part_usage
+        name: (identifier)
+        (typing
+          type: (type_ref (identifier))))
+      (attribute_def
+        name: (identifier)
+        (typing
+          type: (type_ref (identifier))))
+      (attribute_usage
+        name: (identifier)
+        (typing
+          type: (type_ref (identifier)))))))
+
+=======================
+definitions-and-usages
+=======================
+
+import foo::bar;
+action def Run;
+action run : Run;
+state def Idle;
+state idle;
+interface def I;
+port def P;
+requirement def Req;
+constraint def C;
+enum def Mode;
+type def Speed;
+
+---
+
+(source_file
+  (import_decl
+    path: (import_path))
+  (definition
+    name: (identifier))
+  (usage
+    name: (identifier)
+    (typing
+      type: (type_ref (identifier))))
+  (definition
+    name: (identifier))
+  (usage
+    name: (identifier))
+  (definition
+    name: (identifier))
+  (definition
+    name: (identifier))
+  (definition
+    name: (identifier))
+  (definition
+    name: (identifier))
+  (definition
+    name: (identifier))
+  (definition
+    name: (identifier)))

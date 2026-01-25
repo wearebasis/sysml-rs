@@ -1,0 +1,4 @@
+target/
+extension.wasm
+grammars/sysml
+grammars/sysml.bak

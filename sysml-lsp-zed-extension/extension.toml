@@ -1,0 +1,16 @@
+id = "sysml-lsp-zed-extension"
+name = "sysml-lsp-zed-extension"
+version = "0.1.0"
+schema_version = 1
+description = "SysML v2 language support (LSP + highlighting)."
+repository = "https://github.com/wearebasis/sysml-rs"
+
+# Uses the in-repo sysml-ts Tree-sitter grammar.
+[grammars.sysml]
+repository = "file://.."
+path = "sysml-ts/tree-sitter"
+rev = "HEAD"
+
+[language_servers.sysml-lsp]
+name = "SysML LSP"
+languages = ["SysML"]

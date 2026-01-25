@@ -90,3 +90,29 @@ for item in outline {
 ## Future Work
 
 When tree-sitter grammar for SysML v2 is available, this crate will integrate with it for full incremental parsing support.
+
+## Generated token tables
+
+`sysml-ts` includes generated keyword/operator/enum tables derived from the Xtext specs to
+keep Tree-sitter grammar data in sync with the parser pipeline.
+
+To regenerate:
+
+```bash
+cargo run -p sysml-ts --bin generate_ts_tokens --features codegen
+```
+
+This writes `sysml-ts/generated/*.js` using `sysmlv2-references` as the source of truth.
+
+## Tree-sitter stub + coverage check
+
+The current Tree-sitter stub grammar lives at `sysml-ts/tree-sitter/grammar.js` and
+consumes the generated keyword/operator/enum tables.
+
+To run a basic coverage report against Xtext rules + ElementKinds:
+
+```bash
+cargo run -p sysml-ts --bin validate_ts_coverage --features codegen
+```
+
+Set `SYSML_TS_SHOW_MISSING=1` to list missing rules.

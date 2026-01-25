@@ -7,3 +7,20 @@ description = "Tree-sitter based CST parsing for SysML v2 (IDE-focused, fast)"
 
 [dependencies]
 sysml-span = { workspace = true }
+
+[dependencies.sysml-codegen]
+workspace = true
+optional = true
+
+[features]
+codegen = ["sysml-codegen"]
+
+[[bin]]
+name = "generate_ts_tokens"
+path = "src/bin/generate_ts_tokens.rs"
+required-features = ["codegen"]
+
+[[bin]]
+name = "validate_ts_coverage"
+path = "src/bin/validate_ts_coverage.rs"
+required-features = ["codegen"]
