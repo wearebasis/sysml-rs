@@ -23,7 +23,7 @@
 
 pub mod library;
 
-use sysml_core::resolution::{resolve_references, ResolutionResult};
+use sysml_core::resolution::{resolve_references, resolve_references_excluding, ResolutionResult};
 use sysml_core::ModelGraph;
 use sysml_span::Diagnostic;
 
@@ -154,14 +154,20 @@ impl ParseResult {
     /// assert!(result.is_ok()); // Standard library types now resolve
     /// ```
     pub fn into_resolved_with_library(mut self, library: ModelGraph) -> Self {
+        // Collect library element IDs before merging so we can skip them during resolution.
+        // Library elements have already been resolved (with some failures) during
+        // load_standard_library(). Re-resolving would double-count the failures.
+        let library_element_ids: std::collections::HashSet<_> =
+            library.elements.keys().cloned().collect();
+
         // Merge library into our graph (as_library=true registers root packages)
+        // Note: merge() now properly merges indexes, so no rebuild_indexes() needed
         self.graph.merge(library, true);
 
-        // Rebuild indexes after merge
-        self.graph.rebuild_indexes();
+        // Resolve only non-library elements
+        let _result = resolve_references_excluding(&mut self.graph, &library_element_ids);
 
-        // Now resolve
-        self.into_resolved()
+        self
     }
 
     /// Resolve references with library and return detailed statistics.
@@ -169,14 +175,82 @@ impl ParseResult {
     /// Like `into_resolved_with_library`, but returns the `ResolutionResult`
     /// with statistics instead of consuming self.
     pub fn resolve_with_library(&mut self, library: ModelGraph) -> ResolutionResult {
+        // Collect library element IDs before merging so we can skip them during resolution.
+        // Library elements have already been resolved (with some failures) during
+        // load_standard_library(). Re-resolving would double-count the failures.
+        let library_element_ids: std::collections::HashSet<_> =
+            library.elements.keys().cloned().collect();
+
         // Merge library into our graph
+        // Note: merge() now properly merges indexes, so no rebuild_indexes() needed
         self.graph.merge(library, true);
 
-        // Rebuild indexes after merge
-        self.graph.rebuild_indexes();
+        // Resolve only non-library elements
+        resolve_references_excluding(&mut self.graph, &library_element_ids)
+    }
 
-        // Now resolve
-        resolve_references(&mut self.graph)
+    /// Run structural validation and add any errors to diagnostics.
+    ///
+    /// This checks for:
+    /// - Orphan elements (non-root elements without owners)
+    /// - Ownership cycles
+    /// - Dangling references in memberships
+    /// - Invalid owning_membership references
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let mut result = parser.parse(&files);
+    /// result.validate_structure();
+    /// if result.has_errors() {
+    ///     for diag in &result.diagnostics {
+    ///         eprintln!("{}", diag);
+    ///     }
+    /// }
+    /// ```
+    pub fn validate_structure(&mut self) {
+        let errors = self.graph.validate_structure();
+        for error in errors {
+            self.diagnostics.push(error.into());
+        }
+    }
+
+    /// Run relationship type validation and add any errors to diagnostics.
+    ///
+    /// This checks that relationship elements have source/target types
+    /// matching the spec constraints (e.g., FeatureTyping requires a
+    /// Feature owner and Type target).
+    ///
+    /// Note: This validation is most useful after name resolution,
+    /// when target properties contain resolved ElementIds.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let mut result = parser.parse(&files).into_resolved();
+    /// result.validate_relationships();
+    /// ```
+    pub fn validate_relationships(&mut self) {
+        let errors = self.graph.validate_relationship_types();
+        for error in errors {
+            self.diagnostics.push(error.into());
+        }
+    }
+
+    /// Run all validations and add any errors to diagnostics.
+    ///
+    /// This runs both structural validation and relationship type validation.
+    /// Returns `self` for method chaining.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let result = parser.parse(&files).into_resolved().into_validated();
+    /// ```
+    pub fn into_validated(mut self) -> Self {
+        self.validate_structure();
+        self.validate_relationships();
+        self
     }
 }
 
@@ -327,5 +401,57 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(parser.name(), "stub");
+    }
+
+    // === Validation Integration Tests (Phase 5) ===
+
+    #[test]
+    fn validate_structure_adds_diagnostics() {
+        use sysml_core::{Element, ElementKind};
+
+        let mut graph = ModelGraph::new();
+
+        // Add a PartDefinition without an owner (not a valid root)
+        let part = Element::new_with_kind(ElementKind::PartDefinition).with_name("OrphanPart");
+        graph.add_element(part);
+
+        let mut result = ParseResult::success(graph);
+        assert!(result.is_ok(), "No parse errors initially");
+
+        result.validate_structure();
+        assert!(result.has_errors(), "Should have structural validation errors");
+
+        // Check that the error has the correct code
+        let orphan_errors: Vec<_> = result.diagnostics.iter()
+            .filter(|d| d.code == Some("E001".to_string()))
+            .collect();
+        assert!(!orphan_errors.is_empty(), "Should have orphan element error E001");
+    }
+
+    #[test]
+    fn validate_structure_no_errors_on_valid_graph() {
+        use sysml_core::{Element, ElementKind};
+
+        let mut graph = ModelGraph::new();
+
+        // Add a valid Package as root
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("ValidPkg");
+        graph.add_element(pkg);
+
+        let mut result = ParseResult::success(graph);
+        result.validate_structure();
+        assert!(result.is_ok(), "Valid graph should have no validation errors");
+    }
+
+    #[test]
+    fn into_validated_chains() {
+        use sysml_core::{Element, ElementKind};
+
+        let mut graph = ModelGraph::new();
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("Pkg");
+        graph.add_element(pkg);
+
+        let result = ParseResult::success(graph).into_validated();
+        assert!(result.is_ok(), "Valid graph should pass validation");
     }
 }

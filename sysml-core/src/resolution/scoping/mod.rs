@@ -14,6 +14,10 @@
 //! | TransitionSpecific | State machine transitions | Triggers, guards, effects |
 //! | Global | Root package scope | Imports |
 
+// Import tracing macro from parent module
+#[allow(unused_imports)]
+use super::res_trace;
+
 pub mod owning;
 pub mod non_expression;
 pub mod relative;

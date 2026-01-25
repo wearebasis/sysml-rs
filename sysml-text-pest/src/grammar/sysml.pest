@@ -423,7 +423,17 @@ UsageMember = { Visibility? ~ UsageElement }
 
 DefinitionMember = { Visibility? ~ DefinitionElement }
 
-RelationshipMember = { Visibility? ~ Dependency }
+// RelationshipMember: standalone relationships (Dependency, Subsetting, etc.)
+RelationshipMember = {
+    Visibility? ~ (
+        Dependency
+        | SubsettingRelationship
+        | RedefinitionRelationship
+        | FeatureTypingRelationship
+        | DisjointRelationship
+        | SubclassificationRelationship
+    )
+}
 
 VariantUsageMember = { Visibility? ~ KW_VARIANT ~ VariantUsageElement }
 
@@ -484,7 +494,35 @@ DefinitionPrefix = { BasicDefinitionPrefix? ~ DefinitionExtensionKeyword* }
 BasicDefinitionPrefix = { Abstract | Variation }
 DefinitionExtensionKeyword = { PrefixMetadataMember }
 
-DefinitionDeclaration = { Identification? ~ SubclassificationPart? }
+// Per KerML.xtext ClassifierDeclaration: ( isSufficient ?= 'all' )? Identification? SpecializationPart?
+DefinitionDeclaration = { Sufficient? ~ Identification? ~ SubclassificationPart? ~ TypeRelationshipPart* }
+
+// Type Relationship Parts (intersects, unions, differences, disjoints)
+// Per KerML.xtext lines 341-363
+TypeRelationshipPart = {
+    DisjoiningPart
+    | UnioningPart
+    | IntersectingPart
+    | DifferencingPart
+}
+
+// 'disjoint from' Type (',' Type)*
+DisjoiningPart = { KW_DISJOINT ~ KW_FROM ~ Disjoining ~ ("," ~ Disjoining)* }
+
+// 'unions' Type (',' Type)*
+UnioningPart = { KW_UNIONS ~ Unioning ~ ("," ~ Unioning)* }
+
+// 'intersects' Type (',' Type)*
+IntersectingPart = { KW_INTERSECTS ~ Intersecting ~ ("," ~ Intersecting)* }
+
+// 'differences' Type (',' Type)*
+DifferencingPart = { KW_DIFFERENCES ~ Differencing ~ ("," ~ Differencing)* }
+
+// Type references for relationship parts
+Disjoining = { OwnedFeatureChain | QualifiedName }
+Unioning = { OwnedFeatureChain | QualifiedName }
+Intersecting = { OwnedFeatureChain | QualifiedName }
+Differencing = { OwnedFeatureChain | QualifiedName }
 
 DefinitionBody = { ";" | "{" ~ DefinitionBodyItem* ~ "}" }
 
@@ -860,10 +898,19 @@ MultiplicityDefinition = {
 }
 
 // KerML Feature: [modifiers] feature [name] [:> Parent] [= value] { ... } | ;
-// Uses RefPrefix to support all KerML feature modifiers (var, composite, portion, const, derived)
-// Per KerML.xtext: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration? | ...)
+// Per KerML.xtext (lines 539-547):
+//   Feature: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration?
+//            | (EndFeaturePrefix | BasicFeaturePrefix) FeatureDeclaration) ValuePart? TypeBody
+// Where FeaturePrefix = (EndFeaturePrefix OwnedCrossingFeatureMember? | BasicFeaturePrefix) PrefixMetadataMember*
+//
+// Pattern 1: prefix feature decl? valuePart? body  (simple feature)
+// Pattern 2: end crossing? feature decl? valuePart? body  (end feature with crossing)
+// Pattern 3: end decl valuePart? body  (end feature without keyword)
+// Pattern 4: prefix decl valuePart? body  (simple feature without keyword)
 FeatureDefinition = {
-    RefPrefix ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+    // Pattern 1 & 2: with 'feature' keyword
+    (EndUsagePrefix | RefPrefix) ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+    // Pattern 3 & 4 without 'feature' keyword are handled by DefaultReferenceUsage
 }
 
 // KerML Behavior: [abstract] behavior Name [:> Parent] { ... } | ;
@@ -924,6 +971,10 @@ NonOccurrenceUsageElement = {
     | ExpressionUsage
     | BooleanExpressionUsage
     | InvariantUsage
+    // KerML connector types (for standard library parsing)
+    | Connector
+    | BindingConnector
+    | Succession
 }
 
 OccurrenceUsageElement = {
@@ -996,6 +1047,9 @@ UsageExtensionKeyword = { PrefixMetadataMember }
 // OwnedCrossingFeatureMember must NOT match usage keywords (occurrence, port, etc.)
 // It's only for cross-features with explicit prefix modifiers (in/out/ref/etc.)
 OwnedCrossingFeatureMember = { !UsageKeywordLookahead ~ OwnedCrossingFeature }
+// OwnedCrossingFeature: [prefix] declaration
+// Per KerML.xtext: BasicFeaturePrefix FeatureDeclaration
+// The nested 'feature' keyword belongs to the OUTER Feature rule, not here
 OwnedCrossingFeature = { BasicUsagePrefix? ~ UsageDeclaration }
 
 // Lookahead for usage keywords that should NOT be consumed by OwnedCrossingFeatureMember
@@ -1009,7 +1063,9 @@ UsageKeywordLookahead = {
     KW_BINDING | KW_ALLOCATE | KW_CONNECT | KW_PERFORM | KW_EXHIBIT |
     KW_INCLUDE | KW_SATISFY | KW_ASSERT | KW_USE |
     // Actor/Subject/Stakeholder keywords (for package body extension)
-    KW_ACTOR | KW_SUBJECT | KW_STAKEHOLDER
+    KW_ACTOR | KW_SUBJECT | KW_STAKEHOLDER |
+    // KW_FEATURE for "end feature" pattern (prevents OwnedCrossingFeatureMember from consuming)
+    KW_FEATURE
 }
 
 UsageDeclaration = { FeatureDeclaration }
@@ -1324,24 +1380,84 @@ InvariantUsage = {
 }
 
 // =============================================================================
+// KERML CONNECTORS (for standard library parsing)
+// =============================================================================
+
+// KerML Connector: [modifiers] connector [decl] [from end to end | (end, end+)] { } | ;
+// Per KerML.xtext lines 824-844
+// Supports:
+// - connector : Type from [1] self to [1] this;  (binary with typing)
+// - connector name from ref to ref;              (binary with name)
+// - connector all from ref to ref;               (sufficient binary)
+// - connector (ref, ref);                        (n-ary)
+// - connector name : Type { }                    (plain declaration)
+Connector = {
+    UsagePrefix ~ KW_CONNECTOR ~ (
+        // Binary connector: [decl] from end to end
+        FeatureDeclaration? ~ KW_FROM ~ ConnectorEndMember ~ KW_TO ~ ConnectorEndMember
+        // Sufficient binary: all [from] end to end
+        | Sufficient ~ KW_FROM? ~ ConnectorEndMember ~ KW_TO ~ ConnectorEndMember
+        // N-ary connector: [decl] (end, end, ...)
+        | FeatureDeclaration? ~ "(" ~ ConnectorEndMember ~ ("," ~ ConnectorEndMember)+ ~ ")"
+        // Plain declaration (no from/to) - must be last as it's the fallback
+        | FeatureDeclaration? ~ ValuePart?
+    ) ~ DefinitionBody
+}
+
+// KerML BindingConnector: [modifiers] binding [decl] [of end = end] { } | ;
+// Per KerML.xtext lines 867-879:
+//   BindingConnectorDeclaration:
+//     FeatureDeclaration ('of' end '=' end)?
+//   | (all)? (of? end = end)?
+//
+// IMPORTANT: PEG order matters. Try anonymous form first when we see `[` (multiplicity)
+// since that could be ConnectorEnd's OwnedCrossMultiplicity, not FeatureDeclaration's multiplicity.
+BindingConnector = {
+    UsagePrefix ~ KW_BINDING ~ (
+        // Pattern 1: Named with 'of' (e.g., "binding oSelf of x.a = y.b")
+        // Must have identifier (not just multiplicity) before 'of'
+        Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart* ~ KW_OF ~ ConnectorEndMember ~ "=" ~ ConnectorEndMember
+        // Pattern 2: Anonymous binding [all] [of] end = end (e.g., "binding [1] startShot = [1] endShot")
+        | Sufficient? ~ KW_OF? ~ ConnectorEndMember ~ "=" ~ ConnectorEndMember
+        // Pattern 3: Named declaration only (e.g., "binding oSelf;")
+        | FeatureDeclaration ~ ValuePart?
+    ) ~ DefinitionBody
+}
+
+// KerML Succession: [modifiers] succession [decl] [first end then end] { } | ;
+// Per KerML.xtext lines 881-895
+Succession = {
+    UsagePrefix ~ KW_SUCCESSION ~ (
+        // Succession form: [first] end then end
+        KW_FIRST? ~ ConnectorEndMember ~ KW_THEN ~ ConnectorEndMember
+        // Plain declaration
+        | FeatureDeclaration? ~ ValuePart?
+    ) ~ DefinitionBody
+}
+
+// =============================================================================
 // FEATURES
 // =============================================================================
 
 // FeatureDeclaration matches xtext:
-// Identification FeatureSpecializationPart? | FeatureSpecializationPart
+// ( isSufficient ?= 'all' )? (Identification FeatureSpecializationPart? | FeatureSpecializationPart)
 // Note: FeatureSpecializationPart first to handle contextual keywords (redefines, etc.)
 // When input starts with specialization syntax (:, :>, :>>, etc.), match anonymous feature.
 // Otherwise, match Identification with optional specialization.
 // FeatureRelationshipPart* is appended for chains, inverse of, featured by
 FeatureDeclaration = {
-    FeatureSpecializationPart ~ FeatureRelationshipPart*
-    | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
+    Sufficient? ~ (
+        FeatureSpecializationPart ~ FeatureRelationshipPart*
+        | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
+    )
 }
 
-// KerML Feature Relationship Parts (chains, inverse of, featured by)
+// KerML Feature Relationship Parts (chains, inverse of, featured by, type relationships)
 // These follow the FeatureSpecializationPart in FeatureDeclaration
+// Per KerML.xtext, FeatureRelationshipPart includes TypeRelationshipPart
 FeatureRelationshipPart = {
-    ChainingPart
+    TypeRelationshipPart
+    | ChainingPart
     | InvertingPart
     | TypeFeaturingPart
 }
@@ -1494,13 +1610,70 @@ MetadataBodyUsage = {
 }
 
 // =============================================================================
-// RELATIONSHIPS (Dependencies)
+// RELATIONSHIPS (Dependencies, Subsetting, Redefinition, etc.)
 // =============================================================================
 
 Dependency = {
     PrefixMetadataAnnotation* ~ KW_DEPENDENCY ~ (Identification? ~ KW_FROM)? ~
     QualifiedName ~ ("," ~ QualifiedName)* ~ KW_TO ~
     QualifiedName ~ ("," ~ QualifiedName)* ~
+    RelationshipBody
+}
+
+// KerML Standalone Subsetting: [specialization [name]] subset <feature> subsets <feature> ;
+// Per KerML.xtext lines 712-720
+// Pattern: subset laterOccurrence.successors subsets earlierOccurrence.successors;
+SubsettingRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_SUBSET ~
+    (OwnedFeatureChain | QualifiedName) ~
+    SubsetsToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Redefinition: [specialization [name]] redefinition <feature> redefines <feature> ;
+// Per KerML.xtext lines 736-745
+RedefinitionRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_REDEFINITION ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RedefinesToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone FeatureTyping: [specialization [name]] typing <feature> : <type> ;
+// Per KerML.xtext lines 677-686
+FeatureTypingRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_TYPING ~
+    QualifiedName ~
+    TypedByToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Disjoining: [disjoining [name]] disjoint <type> from <type> ;
+// Per KerML.xtext lines 414-423
+DisjointRelationship = {
+    (KW_DISJOINING ~ Identification?)? ~
+    KW_DISJOINT ~
+    (OwnedFeatureChain | QualifiedName) ~
+    KW_FROM ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Subclassification: [specialization [name]] subclassifier <type> specializes <type> ;
+// Per KerML.xtext lines 487-492
+// Pattern: subclassifier SelfLink specializes SelfSameLifeLink;
+SubclassificationRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_SUBCLASSIFIER ~
+    QualifiedName ~
+    SpecializesToken ~
+    QualifiedName ~
     RelationshipBody
 }
 
@@ -1946,14 +2119,20 @@ PrimaryExpression = {
     ("." ~ FeatureChainMember)?
 }
 
+// Constructor Expression - 'new TypeName(args)'
+// Must be checked before InvocationExpression since both have 'name + argument list' pattern
+ConstructorExpression = { KW_NEW ~ OwnedFeatureTyping ~ ArgumentList }
+
 // Base Expressions
-// Note: InvocationExpression must come BEFORE FeatureReferenceExpression
-// because InvocationExpression is more specific (name + argument list)
+// Note: ConstructorExpression and InvocationExpression must come BEFORE FeatureReferenceExpression
+// because they are more specific (name + argument list)
 // and FeatureReferenceExpression would match just the name, leaving ()
+// ConstructorExpression must come before InvocationExpression due to 'new' keyword
 BaseExpression = {
     NullExpression
     | LiteralExpression
     | MetadataAccessExpression
+    | ConstructorExpression
     | InvocationExpression
     | FeatureReferenceExpression
     | BodyExpression

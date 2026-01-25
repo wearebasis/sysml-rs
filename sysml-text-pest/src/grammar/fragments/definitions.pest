@@ -51,7 +51,35 @@ DefinitionPrefix = { BasicDefinitionPrefix? ~ DefinitionExtensionKeyword* }
 BasicDefinitionPrefix = { Abstract | Variation }
 DefinitionExtensionKeyword = { PrefixMetadataMember }
 
-DefinitionDeclaration = { Identification? ~ SubclassificationPart? }
+// Per KerML.xtext ClassifierDeclaration: ( isSufficient ?= 'all' )? Identification? SpecializationPart?
+DefinitionDeclaration = { Sufficient? ~ Identification? ~ SubclassificationPart? ~ TypeRelationshipPart* }
+
+// Type Relationship Parts (intersects, unions, differences, disjoints)
+// Per KerML.xtext lines 341-363
+TypeRelationshipPart = {
+    DisjoiningPart
+    | UnioningPart
+    | IntersectingPart
+    | DifferencingPart
+}
+
+// 'disjoint from' Type (',' Type)*
+DisjoiningPart = { KW_DISJOINT ~ KW_FROM ~ Disjoining ~ ("," ~ Disjoining)* }
+
+// 'unions' Type (',' Type)*
+UnioningPart = { KW_UNIONS ~ Unioning ~ ("," ~ Unioning)* }
+
+// 'intersects' Type (',' Type)*
+IntersectingPart = { KW_INTERSECTS ~ Intersecting ~ ("," ~ Intersecting)* }
+
+// 'differences' Type (',' Type)*
+DifferencingPart = { KW_DIFFERENCES ~ Differencing ~ ("," ~ Differencing)* }
+
+// Type references for relationship parts
+Disjoining = { OwnedFeatureChain | QualifiedName }
+Unioning = { OwnedFeatureChain | QualifiedName }
+Intersecting = { OwnedFeatureChain | QualifiedName }
+Differencing = { OwnedFeatureChain | QualifiedName }
 
 DefinitionBody = { ";" | "{" ~ DefinitionBodyItem* ~ "}" }
 
@@ -427,10 +455,19 @@ MultiplicityDefinition = {
 }
 
 // KerML Feature: [modifiers] feature [name] [:> Parent] [= value] { ... } | ;
-// Uses RefPrefix to support all KerML feature modifiers (var, composite, portion, const, derived)
-// Per KerML.xtext: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration? | ...)
+// Per KerML.xtext (lines 539-547):
+//   Feature: (FeaturePrefix ('feature' | PrefixMetadataMember) FeatureDeclaration?
+//            | (EndFeaturePrefix | BasicFeaturePrefix) FeatureDeclaration) ValuePart? TypeBody
+// Where FeaturePrefix = (EndFeaturePrefix OwnedCrossingFeatureMember? | BasicFeaturePrefix) PrefixMetadataMember*
+//
+// Pattern 1: prefix feature decl? valuePart? body  (simple feature)
+// Pattern 2: end crossing? feature decl? valuePart? body  (end feature with crossing)
+// Pattern 3: end decl valuePart? body  (end feature without keyword)
+// Pattern 4: prefix decl valuePart? body  (simple feature without keyword)
 FeatureDefinition = {
-    RefPrefix ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+    // Pattern 1 & 2: with 'feature' keyword
+    (EndUsagePrefix | RefPrefix) ~ KW_FEATURE ~ UsageDeclaration? ~ UsageCompletion
+    // Pattern 3 & 4 without 'feature' keyword are handled by DefaultReferenceUsage
 }
 
 // KerML Behavior: [abstract] behavior Name [:> Parent] { ... } | ;

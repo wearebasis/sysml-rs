@@ -425,6 +425,327 @@ pub fn get_keyword_classification_summary(keywords: &[String]) -> BTreeMap<Strin
     summary
 }
 
+// =============================================================================
+// EXPRESSION VALIDATION
+// =============================================================================
+
+/// Expected BaseExpression alternatives from KerMLExpressions.xtext
+/// These are the primary expression types that must have corresponding grammar rules.
+const EXPECTED_BASE_EXPRESSIONS: &[&str] = &[
+    "NullExpression",
+    "LiteralExpression",
+    "FeatureReferenceExpression",
+    "MetadataAccessExpression",
+    "InvocationExpression",
+    "ConstructorExpression",
+    "BodyExpression",
+];
+
+/// Result of validating expression rule coverage.
+#[derive(Debug, Clone, Default)]
+pub struct ExpressionValidationResult {
+    /// Expression rules that are expected but missing from the grammar.
+    pub missing_rules: Vec<String>,
+    /// Expression rules that were found and validated.
+    pub validated_rules: Vec<String>,
+}
+
+impl ExpressionValidationResult {
+    /// Returns true if validation passed with no missing rules.
+    pub fn is_valid(&self) -> bool {
+        self.missing_rules.is_empty()
+    }
+
+    /// Format the validation result as a report string.
+    pub fn format_report(&self) -> String {
+        let mut report = String::new();
+
+        if self.is_valid() {
+            report.push_str("Expression coverage validation PASSED\n");
+            report.push_str(&format!(
+                "  Validated {} expression rules\n",
+                self.validated_rules.len()
+            ));
+        } else {
+            report.push_str("Expression coverage validation FAILED\n");
+            report.push_str("\nMissing expression rules:\n");
+            for rule in &self.missing_rules {
+                report.push_str(&format!("  - {}\n", rule));
+            }
+        }
+
+        report
+    }
+}
+
+/// Validate that all expected base expression rules are present in the grammar.
+///
+/// This checks that grammar rules exist for the BaseExpression alternatives
+/// defined in KerMLExpressions.xtext. This prevents regressions like the
+/// ConstructorExpression rule being accidentally omitted.
+///
+/// # Arguments
+///
+/// * `grammar_content` - The pest grammar content to validate
+///
+/// # Returns
+///
+/// An `ExpressionValidationResult` containing any missing rules.
+pub fn validate_expression_coverage(grammar_content: &str) -> ExpressionValidationResult {
+    let mut result = ExpressionValidationResult::default();
+
+    // Extract all rule names from the grammar
+    let grammar_rules = extract_grammar_rules(grammar_content);
+
+    // Check each expected expression rule
+    for expected in EXPECTED_BASE_EXPRESSIONS {
+        if grammar_rules.contains(*expected) {
+            result.validated_rules.push(expected.to_string());
+        } else {
+            result.missing_rules.push(expected.to_string());
+        }
+    }
+
+    // Sort for consistent output
+    result.missing_rules.sort();
+    result.validated_rules.sort();
+
+    result
+}
+
+// =============================================================================
+// XTEXT RULE COVERAGE VALIDATION
+// =============================================================================
+
+/// Result of validating pest grammar coverage against xtext rules.
+#[derive(Debug, Clone, Default)]
+pub struct XtextRuleCoverageResult {
+    /// Xtext rules that are not present in the pest grammar (potential gaps).
+    pub missing_rules: Vec<String>,
+    /// Rules that were found in both xtext and pest grammar.
+    pub covered_rules: Vec<String>,
+    /// Xtext rules that are marked as fragments (usually internal/helper rules).
+    pub fragment_rules: Vec<String>,
+}
+
+impl XtextRuleCoverageResult {
+    /// Format the validation result as a report string.
+    pub fn format_report(&self) -> String {
+        let mut report = String::new();
+
+        let total = self.covered_rules.len() + self.missing_rules.len();
+        let coverage_pct = if total > 0 {
+            (self.covered_rules.len() as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        report.push_str(&format!(
+            "Xtext rule coverage: {}/{} ({:.1}%)\n",
+            self.covered_rules.len(),
+            total,
+            coverage_pct
+        ));
+
+        if !self.missing_rules.is_empty() {
+            report.push_str(&format!(
+                "\nMissing xtext rules ({}):\n",
+                self.missing_rules.len()
+            ));
+            for rule in &self.missing_rules {
+                report.push_str(&format!("  - {}\n", rule));
+            }
+        }
+
+        report
+    }
+}
+
+/// Parse xtext content to extract rule names.
+///
+/// This extracts both regular rules and fragment rules from xtext grammar files.
+/// Fragment rules are internal helpers and may not need direct pest equivalents.
+///
+/// Looks for patterns like:
+/// - `RuleName returns SysML::Type :`  (regular rule)
+/// - `fragment RuleName returns SysML::Type :`  (fragment rule)
+/// - `RuleName:` (simple rule at start of line)
+pub fn parse_xtext_rules(xtext_content: &str) -> Vec<(String, bool)> {
+    let mut rules = Vec::new();
+
+    for line in xtext_content.lines() {
+        let trimmed = line.trim();
+
+        // Skip comments and empty lines
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("*") {
+            continue;
+        }
+
+        // Check for fragment rules: "fragment RuleName returns ..."
+        if trimmed.starts_with("fragment ") {
+            if let Some(rest) = trimmed.strip_prefix("fragment ") {
+                if let Some(name) = extract_rule_name_from_line(rest) {
+                    rules.push((name, true)); // true = is fragment
+                }
+            }
+            continue;
+        }
+
+        // Check for regular rules: "RuleName returns ..." or "RuleName:"
+        // Must start with uppercase letter (rule names are PascalCase in xtext)
+        // Must have "returns" or end with ":" to be a rule definition
+        if let Some(first_char) = trimmed.chars().next() {
+            if first_char.is_ascii_uppercase() {
+                // Only match lines that are rule definitions (have "returns" or end with ":")
+                if trimmed.contains(" returns ") || trimmed.ends_with(':') {
+                    if let Some(name) = extract_rule_name_from_line(trimmed) {
+                        rules.push((name, false)); // false = not a fragment
+                    }
+                }
+            }
+        }
+    }
+
+    rules
+}
+
+/// Extract rule name from a line like "RuleName returns SysML::Type :" or "RuleName:"
+fn extract_rule_name_from_line(line: &str) -> Option<String> {
+    // Find the rule name (first word, ends at space or ':')
+    let name_end = line.find(|c: char| c.is_whitespace() || c == ':' || c == '[')?;
+    let name = &line[..name_end];
+
+    // Validate it's a proper rule name (starts with uppercase, alphanumeric)
+    if name.is_empty() || !name.chars().next()?.is_ascii_uppercase() {
+        return None;
+    }
+
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+
+    Some(name.to_string())
+}
+
+/// Rules that we intentionally don't implement in pest because they're handled differently.
+/// These are rules that exist in xtext but we've consciously decided to handle differently
+/// or combine into other rules in our pest grammar.
+const INTENTIONALLY_MISSING_RULES: &[&str] = &[
+    // Terminal rules handled by pest's built-in or our custom terminals
+    "DECIMAL_VALUE",
+    "EXP_VALUE",
+    "STRING_VALUE",
+    "REGULAR_COMMENT",
+    "ID",
+    "UNRESTRICTED_NAME",
+    "ML_NOTE",
+    "SL_NOTE",
+    "WS",
+
+    // Fragment rules that are inlined into other rules
+    "DefinitionPrefix",
+    "UsagePrefix",
+    "FeaturePrefix",
+    "BasicFeaturePrefix",
+    "EndFeaturePrefix",
+    "OccurrenceDefinitionPrefix",
+    "OccurrenceUsagePrefix",
+
+    // Rules combined into others
+    "TypeBody",  // Combined into DefinitionBody
+    "RelationshipOwnedAnnotation",  // Part of RelationshipBody
+
+    // Xtext-specific rules (not needed in pest)
+    "SysML",  // Entry point named differently
+    "KerML",  // Entry point named differently
+];
+
+/// Check if a rule name should be filtered out (handled differently in pest).
+fn is_filtered_rule(name: &str) -> bool {
+    // Check explicit list
+    if INTENTIONALLY_MISSING_RULES.contains(&name) {
+        return true;
+    }
+
+    // Filter *Keyword rules - we generate KW_* from keyword strings
+    if name.ends_with("Keyword") {
+        return true;
+    }
+
+    // Filter *Member rules that wrap other rules (xtext internal)
+    // Keep important Member rules like DefinitionMember, UsageMember
+    if name.ends_with("Member")
+        && !matches!(
+            name,
+            "DefinitionMember"
+                | "UsageMember"
+                | "VariantUsageMember"
+                | "ActorMember"
+                | "StakeholderMember"
+                | "SubjectMember"
+                | "RelationshipMember"
+                | "AnnotatingMember"
+                | "AliasMember"
+                | "ElementFilterMember"
+        )
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Validate pest grammar coverage against xtext rules.
+///
+/// This compares rule names from xtext specification files against the pest grammar
+/// to identify potential gaps where xtext rules don't have pest equivalents.
+///
+/// # Arguments
+///
+/// * `xtext_rules` - Rules extracted from xtext files (name, is_fragment)
+/// * `grammar_content` - The pest grammar content to check against
+///
+/// # Returns
+///
+/// An `XtextRuleCoverageResult` with coverage statistics and missing rules.
+pub fn validate_xtext_rule_coverage(
+    xtext_rules: &[(String, bool)],
+    grammar_content: &str,
+) -> XtextRuleCoverageResult {
+    let mut result = XtextRuleCoverageResult::default();
+
+    // Extract pest rule names
+    let pest_rules = extract_grammar_rules(grammar_content);
+
+    // Check each xtext rule
+    for (rule_name, is_fragment) in xtext_rules {
+        if *is_fragment {
+            result.fragment_rules.push(rule_name.clone());
+            // Don't require fragments to have pest equivalents
+            continue;
+        }
+
+        // Skip filtered rules (intentionally missing or handled differently)
+        if is_filtered_rule(rule_name) {
+            continue;
+        }
+
+        // Check if pest has this rule
+        if pest_rules.contains(rule_name) {
+            result.covered_rules.push(rule_name.clone());
+        } else {
+            result.missing_rules.push(rule_name.clone());
+        }
+    }
+
+    // Sort for consistent output
+    result.missing_rules.sort();
+    result.covered_rules.sort();
+    result.fragment_rules.sort();
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -650,5 +971,176 @@ MessageUsage = { KW_MESSAGE }
         assert!(summary.get("Control").unwrap().contains(&"if".to_string()));
         assert!(summary.get("Contextual").unwrap().contains(&"entry".to_string()));
         assert!(summary.get("Other").unwrap().contains(&"unknown_kw".to_string()));
+    }
+
+    // =========================================================================
+    // Expression Validation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_validate_expression_coverage_success() {
+        let grammar = r#"
+NullExpression = { KW_NULL }
+LiteralExpression = { LiteralNumber | LiteralString }
+FeatureReferenceExpression = { QualifiedName }
+MetadataAccessExpression = { QualifiedName ~ "." ~ KW_METADATA }
+InvocationExpression = { TypeRef ~ ArgumentList }
+ConstructorExpression = { KW_NEW ~ TypeRef ~ ArgumentList }
+BodyExpression = { "{" ~ Expression ~ "}" }
+"#;
+
+        let result = validate_expression_coverage(grammar);
+
+        assert!(result.is_valid());
+        assert!(result.missing_rules.is_empty());
+        assert_eq!(result.validated_rules.len(), 7);
+    }
+
+    #[test]
+    fn test_validate_expression_coverage_missing_constructor() {
+        let grammar = r#"
+NullExpression = { KW_NULL }
+LiteralExpression = { LiteralNumber | LiteralString }
+FeatureReferenceExpression = { QualifiedName }
+MetadataAccessExpression = { QualifiedName ~ "." ~ KW_METADATA }
+InvocationExpression = { TypeRef ~ ArgumentList }
+// ConstructorExpression is missing!
+BodyExpression = { "{" ~ Expression ~ "}" }
+"#;
+
+        let result = validate_expression_coverage(grammar);
+
+        assert!(!result.is_valid());
+        assert!(result.missing_rules.contains(&"ConstructorExpression".to_string()));
+        assert_eq!(result.missing_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_validate_expression_coverage_empty_grammar() {
+        let grammar = "// Empty grammar";
+
+        let result = validate_expression_coverage(grammar);
+
+        assert!(!result.is_valid());
+        // All 7 expression rules should be missing
+        assert_eq!(result.missing_rules.len(), 7);
+    }
+
+    #[test]
+    fn test_expression_validation_report_format() {
+        let grammar = r#"
+NullExpression = { KW_NULL }
+// Missing most rules
+"#;
+
+        let result = validate_expression_coverage(grammar);
+        let report = result.format_report();
+
+        assert!(report.contains("FAILED"));
+        assert!(report.contains("ConstructorExpression"));
+        assert!(report.contains("InvocationExpression"));
+    }
+
+    // =========================================================================
+    // Xtext Rule Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_xtext_rules_regular() {
+        let xtext = r#"
+// Comment
+PartDefinition returns SysML::PartDefinition :
+    'part' 'def' name=ID
+;
+
+ActionUsage returns SysML::ActionUsage :
+    'action' name=ID?
+;
+"#;
+
+        let rules = parse_xtext_rules(xtext);
+
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&("PartDefinition".to_string(), false)));
+        assert!(rules.contains(&("ActionUsage".to_string(), false)));
+    }
+
+    #[test]
+    fn test_parse_xtext_rules_fragments() {
+        let xtext = r#"
+fragment FeaturePrefix returns SysML::Feature :
+    ( direction = FeatureDirection )?
+;
+
+PartUsage returns SysML::PartUsage :
+    FeaturePrefix 'part'
+;
+"#;
+
+        let rules = parse_xtext_rules(xtext);
+
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&("FeaturePrefix".to_string(), true))); // is fragment
+        assert!(rules.contains(&("PartUsage".to_string(), false))); // not fragment
+    }
+
+    #[test]
+    fn test_validate_xtext_rule_coverage_success() {
+        let xtext_rules = vec![
+            ("PartUsage".to_string(), false),
+            ("PartDefinition".to_string(), false),
+            ("FeaturePrefix".to_string(), true), // Fragment - should not require pest rule
+        ];
+
+        let grammar = r#"
+PartUsage = { KW_PART }
+PartDefinition = { KW_PART ~ KW_DEF }
+"#;
+
+        let result = validate_xtext_rule_coverage(&xtext_rules, grammar);
+
+        assert!(result.missing_rules.is_empty());
+        assert_eq!(result.covered_rules.len(), 2);
+        assert_eq!(result.fragment_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_validate_xtext_rule_coverage_missing() {
+        let xtext_rules = vec![
+            ("PartUsage".to_string(), false),
+            ("PartDefinition".to_string(), false),
+            ("ActionUsage".to_string(), false), // Not in grammar
+        ];
+
+        let grammar = r#"
+PartUsage = { KW_PART }
+PartDefinition = { KW_PART ~ KW_DEF }
+// ActionUsage is missing!
+"#;
+
+        let result = validate_xtext_rule_coverage(&xtext_rules, grammar);
+
+        assert!(result.missing_rules.contains(&"ActionUsage".to_string()));
+        assert_eq!(result.missing_rules.len(), 1);
+        assert_eq!(result.covered_rules.len(), 2);
+    }
+
+    #[test]
+    fn test_xtext_rule_coverage_ignores_intentionally_missing() {
+        let xtext_rules = vec![
+            ("PartUsage".to_string(), false),
+            ("DECIMAL_VALUE".to_string(), false), // Intentionally missing (terminal)
+            ("TypeBody".to_string(), false),      // Intentionally missing (combined)
+        ];
+
+        let grammar = r#"
+PartUsage = { KW_PART }
+"#;
+
+        let result = validate_xtext_rule_coverage(&xtext_rules, grammar);
+
+        // Only PartUsage should be counted, others are intentionally missing
+        assert!(result.missing_rules.is_empty());
+        assert_eq!(result.covered_rules.len(), 1);
     }
 }

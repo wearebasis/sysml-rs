@@ -45,12 +45,15 @@ pub mod crossref_generator;
 pub mod crossref_validation;
 pub mod enum_generator;
 pub mod enum_value_generator;
+pub mod grammar_element_validator;
 pub mod hierarchy_generator;
 pub mod inheritance;
 pub mod json_schema_parser;
 pub mod pest_generator;
 pub mod pest_validator;
+pub mod property_validation_validator;
 pub mod relationship_generator;
+pub mod resolution_spec_validator;
 pub mod shapes_parser;
 pub mod spec_validation;
 pub mod ttl_parser;
@@ -72,6 +75,10 @@ pub use relationship_generator::{
     build_constraints_map, generate_relationship_methods,
     generate_relationship_methods_with_constraints, generate_relationship_methods_with_xmi,
     get_fallback_constraint_names, RelationshipConstraint,
+    // Phase 4: Relationship property methods
+    build_relationship_target_properties, generate_relationship_property_methods,
+    validate_relationship_property_coverage, RelationshipPropertyCoverageReport,
+    RelationshipTargetProperty,
 };
 pub use spec_validation::{
     validate_all, validate_enum_coverage, validate_type_coverage, EnumCoverageReport,
@@ -104,8 +111,23 @@ pub use pest_generator::{
     generate_pest_keywords, generate_pest_keywords_from_strings, generate_pest_operators,
 };
 pub use pest_validator::{
-    classify_keyword, get_keyword_classification_summary, validate_keyword_coverage, KeywordType,
-    ValidationResult,
+    classify_keyword, get_keyword_classification_summary,
+    parse_xtext_rules as parse_xtext_rule_names,
+    validate_expression_coverage, validate_keyword_coverage, validate_xtext_rule_coverage,
+    ExpressionValidationResult, KeywordType, ValidationResult, XtextRuleCoverageResult,
+};
+pub use grammar_element_validator::{
+    validate_grammar_element_linkage, GrammarElementLinkageResult,
+};
+pub use resolution_spec_validator::{
+    extract_resolution_unresolved_props, is_base_relationship_prop, is_non_crossref_prop,
+    normalize_resolution_prop_name, validate_resolution_spec_completeness,
+    validate_resolution_spec_with_mappings, ResolutionProp, ResolutionSpecValidationResult,
+    NON_CROSSREF_RESOLUTION_PROPS, RESOLUTION_TO_REGISTRY_MAPPING,
+};
+pub use property_validation_validator::{
+    validate_property_validation_coverage, get_implemented_constraints,
+    ConstraintType, ConstraintStats, PropertyValidationCoverageResult,
 };
 
 #[cfg(test)]

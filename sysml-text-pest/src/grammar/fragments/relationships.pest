@@ -1,11 +1,68 @@
 // =============================================================================
-// RELATIONSHIPS (Dependencies)
+// RELATIONSHIPS (Dependencies, Subsetting, Redefinition, etc.)
 // =============================================================================
 
 Dependency = {
     PrefixMetadataAnnotation* ~ KW_DEPENDENCY ~ (Identification? ~ KW_FROM)? ~
     QualifiedName ~ ("," ~ QualifiedName)* ~ KW_TO ~
     QualifiedName ~ ("," ~ QualifiedName)* ~
+    RelationshipBody
+}
+
+// KerML Standalone Subsetting: [specialization [name]] subset <feature> subsets <feature> ;
+// Per KerML.xtext lines 712-720
+// Pattern: subset laterOccurrence.successors subsets earlierOccurrence.successors;
+SubsettingRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_SUBSET ~
+    (OwnedFeatureChain | QualifiedName) ~
+    SubsetsToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Redefinition: [specialization [name]] redefinition <feature> redefines <feature> ;
+// Per KerML.xtext lines 736-745
+RedefinitionRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_REDEFINITION ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RedefinesToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone FeatureTyping: [specialization [name]] typing <feature> : <type> ;
+// Per KerML.xtext lines 677-686
+FeatureTypingRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_TYPING ~
+    QualifiedName ~
+    TypedByToken ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Disjoining: [disjoining [name]] disjoint <type> from <type> ;
+// Per KerML.xtext lines 414-423
+DisjointRelationship = {
+    (KW_DISJOINING ~ Identification?)? ~
+    KW_DISJOINT ~
+    (OwnedFeatureChain | QualifiedName) ~
+    KW_FROM ~
+    (OwnedFeatureChain | QualifiedName) ~
+    RelationshipBody
+}
+
+// KerML Standalone Subclassification: [specialization [name]] subclassifier <type> specializes <type> ;
+// Per KerML.xtext lines 487-492
+// Pattern: subclassifier SelfLink specializes SelfSameLifeLink;
+SubclassificationRelationship = {
+    (KW_SPECIALIZATION ~ Identification?)? ~
+    KW_SUBCLASSIFIER ~
+    QualifiedName ~
+    SpecializesToken ~
+    QualifiedName ~
     RelationshipBody
 }
 

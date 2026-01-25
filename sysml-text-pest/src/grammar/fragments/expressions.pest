@@ -135,14 +135,20 @@ PrimaryExpression = {
     ("." ~ FeatureChainMember)?
 }
 
+// Constructor Expression - 'new TypeName(args)'
+// Must be checked before InvocationExpression since both have 'name + argument list' pattern
+ConstructorExpression = { KW_NEW ~ OwnedFeatureTyping ~ ArgumentList }
+
 // Base Expressions
-// Note: InvocationExpression must come BEFORE FeatureReferenceExpression
-// because InvocationExpression is more specific (name + argument list)
+// Note: ConstructorExpression and InvocationExpression must come BEFORE FeatureReferenceExpression
+// because they are more specific (name + argument list)
 // and FeatureReferenceExpression would match just the name, leaving ()
+// ConstructorExpression must come before InvocationExpression due to 'new' keyword
 BaseExpression = {
     NullExpression
     | LiteralExpression
     | MetadataAccessExpression
+    | ConstructorExpression
     | InvocationExpression
     | FeatureReferenceExpression
     | BodyExpression

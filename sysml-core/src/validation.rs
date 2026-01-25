@@ -95,6 +95,29 @@ impl fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
+/// Convert ValidationError to Diagnostic for unified error reporting.
+///
+/// Error codes:
+/// - V001: MissingRequired
+/// - V002: WrongType
+/// - V003: MinCardinality
+/// - V004: MaxCardinality
+/// - V005: ReadOnly
+impl From<ValidationError> for sysml_span::Diagnostic {
+    fn from(error: ValidationError) -> Self {
+        let code = match &error.kind {
+            ValidationErrorKind::MissingRequired => "V001",
+            ValidationErrorKind::WrongType { .. } => "V002",
+            ValidationErrorKind::MinCardinality => "V003",
+            ValidationErrorKind::MaxCardinality => "V004",
+            ValidationErrorKind::ReadOnly => "V005",
+        };
+
+        sysml_span::Diagnostic::error(format!("{}: {}", error.property, error.kind))
+            .with_code(code.to_string())
+    }
+}
+
 /// The kind of validation error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationErrorKind {
@@ -113,6 +136,29 @@ pub enum ValidationErrorKind {
     MaxCardinality,
     /// A read-only property was modified.
     ReadOnly,
+}
+
+
+impl fmt::Display for ValidationErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValidationErrorKind::MissingRequired => {
+                write!(f, "missing required property")
+            }
+            ValidationErrorKind::WrongType { expected, got } => {
+                write!(f, "wrong type: expected {}, got {}", expected, got)
+            }
+            ValidationErrorKind::MinCardinality => {
+                write!(f, "requires at least one value")
+            }
+            ValidationErrorKind::MaxCardinality => {
+                write!(f, "allows at most one value")
+            }
+            ValidationErrorKind::ReadOnly => {
+                write!(f, "read-only property")
+            }
+        }
+    }
 }
 
 /// Result of validating an element.
@@ -206,5 +252,40 @@ mod tests {
 
         result1.merge(result2);
         assert_eq!(result1.error_count(), 2);
+    }
+
+    // === Diagnostic Conversion Tests (Phase 5) ===
+
+    #[test]
+    fn validation_error_to_diagnostic() {
+        use sysml_span::Diagnostic;
+
+        let error = ValidationError::missing_required("elementId");
+        let diag: Diagnostic = error.into();
+
+        assert!(diag.is_error());
+        assert_eq!(diag.code, Some("V001".to_string()));
+        assert!(diag.message.contains("elementId"));
+    }
+
+    #[test]
+    fn all_validation_errors_have_codes() {
+        use sysml_span::Diagnostic;
+
+        let errors = vec![
+            ValidationError::missing_required("prop1"),
+            ValidationError::wrong_type("prop2", "ElementId", "string"),
+            ValidationError::min_cardinality("prop3"),
+            ValidationError::max_cardinality("prop4"),
+            ValidationError::read_only("prop5"),
+        ];
+
+        let expected_codes = ["V001", "V002", "V003", "V004", "V005"];
+
+        for (error, expected_code) in errors.into_iter().zip(expected_codes.iter()) {
+            let diag: Diagnostic = error.into();
+            assert_eq!(diag.code, Some(expected_code.to_string()), "Wrong code for error");
+            assert!(diag.is_error());
+        }
     }
 }

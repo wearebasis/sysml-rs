@@ -2,55 +2,107 @@
 //!
 //! This strategy is used for resolving references within state machine
 //! transitions, particularly for:
+//! - Transition sources (the state we transition FROM)
+//! - Transition targets (the state we transition TO)
 //! - Trigger events
 //! - Guard conditions
 //! - Effect actions
 //!
-//! The scoping rules for transitions consider the containing state definition
-//! and the states involved in the transition.
+//! ## Scoping Rules (based on Xtext pilot implementation)
+//!
+//! | Element | Resolution Namespace |
+//! |---------|---------------------|
+//! | Source state | Parent namespace of TransitionUsage (e.g., containing StateDefinition) |
+//! | Target state | Parent namespace of TransitionUsage (e.g., containing StateDefinition) |
+//! | Triggers | TransitionUsage itself, then parent namespace |
+//! | Guards | TransitionUsage itself, then parent namespace |
+//! | Effects | TransitionUsage itself, then parent namespace |
+//!
+//! This allows transition sources and targets to reference sibling states
+//! within the same state machine.
 
 use super::ScopedResolution;
+use crate::resolution::res_trace;
 use crate::ElementId;
 use crate::ModelGraph;
 
 /// Resolve a name in a transition context.
 ///
-/// Transition scoping considers:
-/// 1. The source state's features
-/// 2. The containing state definition's features
-/// 3. The containing package's members
+/// For transition sources and targets, this uses the owning namespace
+/// (parent of the TransitionUsage), which is typically the containing
+/// StateDefinition. This allows referencing sibling states.
+///
+/// For triggers, guards, and effects, standard element scoping applies
+/// (from the TransitionUsage, then parent namespace).
 pub fn resolve_in_transition_context(
     graph: &ModelGraph,
     scope_id: &ElementId,
     name: &str,
 ) -> ScopedResolution {
-    // TODO: Implement transition-specific scoping
-    // For now, fall back to owning namespace
+    res_trace!("Strategy: TransitionSpecific for '{}'", name);
 
-    // Get the transition element
-    let transition = match graph.get_element(scope_id) {
+    // Get the element
+    let element = match graph.get_element(scope_id) {
         Some(e) => e,
         None => return ScopedResolution::NotFound,
     };
 
-    // Check if this is actually a transition-related element
     use crate::ElementKind;
-    let is_transition_related = matches!(
-        transition.kind,
+
+    // Check if this is a transition-related element
+    let is_transition = matches!(
+        element.kind,
         ElementKind::TransitionUsage
-            | ElementKind::AcceptActionUsage
+    );
+
+    let is_transition_feature = matches!(
+        element.kind,
+        ElementKind::AcceptActionUsage
             | ElementKind::SendActionUsage
             | ElementKind::TriggerInvocationExpression
             | ElementKind::StateSubactionMembership
+            | ElementKind::TransitionFeatureMembership
     );
 
-    if is_transition_related {
-        // TODO: Implement proper transition scoping
-        // For now, use owning namespace
+    if is_transition {
+        res_trace!("  In TransitionUsage");
+        // For the transition itself, use owning namespace
+        // This allows resolving source and target states from the containing state machine
         super::owning::resolve_in_owning_namespace(graph, scope_id, name)
+    } else if is_transition_feature {
+        res_trace!("  In transition feature ({:?})", element.kind);
+        // For triggers, guards, effects - find the containing transition first
+        // Then resolve from there using owning namespace
+        if let Some(transition_id) = find_containing_transition(graph, scope_id) {
+            res_trace!("  Found containing transition: {:?}", transition_id);
+            super::owning::resolve_in_owning_namespace(graph, &transition_id, name)
+        } else {
+            // Fallback: resolve from current scope
+            super::owning::resolve_in_owning_namespace(graph, scope_id, name)
+        }
     } else {
+        res_trace!("  Not in transition context, using owning namespace");
         // Not a transition context, fall back to owning namespace
         super::owning::resolve_in_owning_namespace(graph, scope_id, name)
+    }
+}
+
+/// Find the containing TransitionUsage for an element.
+fn find_containing_transition(graph: &ModelGraph, element_id: &ElementId) -> Option<ElementId> {
+    use crate::ElementKind;
+
+    let mut current_id = element_id.clone();
+
+    // Walk up the ownership chain looking for a TransitionUsage
+    loop {
+        let element = graph.get_element(&current_id)?;
+
+        if matches!(element.kind, ElementKind::TransitionUsage) {
+            return Some(current_id);
+        }
+
+        // Walk up to owner
+        current_id = element.owner.clone()?;
     }
 }
 

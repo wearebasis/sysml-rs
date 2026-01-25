@@ -89,6 +89,9 @@ fn generate_property_validation(output: &mut String, prop: &PropertyInfo) {
 
                 // Type check
                 generate_type_check(output, prop);
+
+                // MaxCardinality check - exactly one means at most 1 value
+                generate_max_cardinality_check(output, prop_name);
                 output.push_str("\n");
             }
         }
@@ -99,6 +102,9 @@ fn generate_property_validation(output: &mut String, prop: &PropertyInfo) {
                 prop_name
             ));
             generate_type_check(output, prop);
+
+            // MaxCardinality check - zero or one means at most 1 value
+            generate_max_cardinality_check(output, prop_name);
             output.push_str("\n");
         }
         Cardinality::OneOrMany => {
@@ -208,6 +214,23 @@ fn generate_list_type_check(output: &mut String, prop: &PropertyInfo) {
     output.push_str("                        break; // Report only first type error\n");
     output.push_str("                    }\n");
     output.push_str("                }\n");
+    output.push_str("            }\n");
+    output.push_str("        }\n");
+}
+
+/// Generate MaxCardinality check code for ZeroOrOne and ExactlyOne properties.
+///
+/// Validates that if the property value is a list, it has at most 1 element.
+fn generate_max_cardinality_check(output: &mut String, prop_name: &str) {
+    output.push_str(&format!(
+        "        if let Some(sysml_meta::Value::List(list)) = self.0.props.get(\"{}\") {{\n",
+        prop_name
+    ));
+    output.push_str("            if list.len() > 1 {\n");
+    output.push_str(&format!(
+        "                result.add_error(ValidationError::max_cardinality(\"{}\"));\n",
+        prop_name
+    ));
     output.push_str("            }\n");
     output.push_str("        }\n");
 }

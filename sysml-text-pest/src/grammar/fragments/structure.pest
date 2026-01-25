@@ -77,7 +77,17 @@ UsageMember = { Visibility? ~ UsageElement }
 
 DefinitionMember = { Visibility? ~ DefinitionElement }
 
-RelationshipMember = { Visibility? ~ Dependency }
+// RelationshipMember: standalone relationships (Dependency, Subsetting, etc.)
+RelationshipMember = {
+    Visibility? ~ (
+        Dependency
+        | SubsettingRelationship
+        | RedefinitionRelationship
+        | FeatureTypingRelationship
+        | DisjointRelationship
+        | SubclassificationRelationship
+    )
+}
 
 VariantUsageMember = { Visibility? ~ KW_VARIANT ~ VariantUsageElement }
 

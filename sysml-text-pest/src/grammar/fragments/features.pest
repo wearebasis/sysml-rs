@@ -3,20 +3,24 @@
 // =============================================================================
 
 // FeatureDeclaration matches xtext:
-// Identification FeatureSpecializationPart? | FeatureSpecializationPart
+// ( isSufficient ?= 'all' )? (Identification FeatureSpecializationPart? | FeatureSpecializationPart)
 // Note: FeatureSpecializationPart first to handle contextual keywords (redefines, etc.)
 // When input starts with specialization syntax (:, :>, :>>, etc.), match anonymous feature.
 // Otherwise, match Identification with optional specialization.
 // FeatureRelationshipPart* is appended for chains, inverse of, featured by
 FeatureDeclaration = {
-    FeatureSpecializationPart ~ FeatureRelationshipPart*
-    | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
+    Sufficient? ~ (
+        FeatureSpecializationPart ~ FeatureRelationshipPart*
+        | Identification ~ FeatureSpecializationPart? ~ FeatureRelationshipPart*
+    )
 }
 
-// KerML Feature Relationship Parts (chains, inverse of, featured by)
+// KerML Feature Relationship Parts (chains, inverse of, featured by, type relationships)
 // These follow the FeatureSpecializationPart in FeatureDeclaration
+// Per KerML.xtext, FeatureRelationshipPart includes TypeRelationshipPart
 FeatureRelationshipPart = {
-    ChainingPart
+    TypeRelationshipPart
+    | ChainingPart
     | InvertingPart
     | TypeFeaturingPart
 }

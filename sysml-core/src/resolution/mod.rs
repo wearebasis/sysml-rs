@@ -56,9 +56,36 @@
 //! - **Global**: For imports and root-level references
 //!
 //! See the `scoping` submodule for implementations.
+//!
+//! ## Resolution Tracing
+//!
+//! Enable detailed resolution tracing by compiling with the `resolution-tracing` feature:
+//!
+//! ```bash
+//! cargo build --features resolution-tracing
+//! ```
+//!
+//! This will print detailed information about each resolution step.
 
 pub mod scoping;
 
+// Resolution tracing macros - enabled with the `resolution-tracing` feature
+#[cfg(feature = "resolution-tracing")]
+macro_rules! res_trace {
+    ($($arg:tt)*) => {
+        eprintln!("[RESOLVE] {}", format!($($arg)*));
+    };
+}
+
+#[cfg(not(feature = "resolution-tracing"))]
+macro_rules! res_trace {
+    ($($arg:tt)*) => {};
+}
+
+// Allow the macro to be used in submodules
+pub(crate) use res_trace;
+
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use sysml_id::ElementId;
@@ -388,8 +415,12 @@ pub struct ScopeTable {
     imported_short: HashMap<String, (ElementId, VisibilityKind)>,
     /// Inherited members (via Specialization): name -> element ID.
     inherited: HashMap<String, ElementId>,
-    /// Whether this scope table has been fully populated.
+    /// Whether this scope table has been fully populated (owned members).
     populated: bool,
+    /// Whether inherited members have been populated.
+    inherited_populated: bool,
+    /// Whether imported members have been populated.
+    imported_populated: bool,
 }
 
 impl ScopeTable {
@@ -501,6 +532,26 @@ impl ScopeTable {
         self.populated
     }
 
+    /// Mark inherited members as populated.
+    pub fn set_inherited_populated(&mut self) {
+        self.inherited_populated = true;
+    }
+
+    /// Check if inherited members have been populated.
+    pub fn has_inherited_populated(&self) -> bool {
+        self.inherited_populated
+    }
+
+    /// Mark imported members as populated.
+    pub fn set_imported_populated(&mut self) {
+        self.imported_populated = true;
+    }
+
+    /// Check if imported members have been populated.
+    pub fn has_imported_populated(&self) -> bool {
+        self.imported_populated
+    }
+
     /// Clear the scope table.
     pub fn clear(&mut self) {
         self.owned.clear();
@@ -509,6 +560,65 @@ impl ScopeTable {
         self.imported_short.clear();
         self.inherited.clear();
         self.populated = false;
+        self.inherited_populated = false;
+        self.imported_populated = false;
+    }
+}
+
+/// Maximum depth for inheritance traversal.
+/// This prevents infinite recursion in case of cycles not caught by the visited set.
+const MAX_INHERITANCE_DEPTH: usize = 50;
+
+/// Pre-computed inheritance index: maps types to their direct supertypes.
+///
+/// This is built lazily and provides O(1) lookup of supertypes,
+/// avoiding repeated iteration over owned members during inheritance expansion.
+#[derive(Debug)]
+struct InheritanceIndex {
+    /// Maps type ElementId -> list of direct supertype ElementIds
+    direct_supertypes: HashMap<ElementId, Vec<ElementId>>,
+}
+
+impl InheritanceIndex {
+    /// Build the inheritance index from a ModelGraph.
+    ///
+    /// Iterates over all elements once to find Specialization relationships
+    /// and pre-computes the direct supertype mapping.
+    fn build(graph: &ModelGraph) -> Self {
+        let mut map: HashMap<ElementId, Vec<ElementId>> = HashMap::new();
+
+        for (_, elem) in &graph.elements {
+            // Look for Specialization elements
+            if elem.kind == ElementKind::Specialization
+                || elem.kind.is_subtype_of(ElementKind::Specialization)
+            {
+                // The owner of the Specialization is the specific (subtype)
+                // The "general" property is the general (supertype)
+                if let Some(specific_id) = &elem.owner {
+                    if let Some(general_id) = elem
+                        .props
+                        .get(resolved_props::GENERAL)
+                        .and_then(|v| v.as_ref())
+                    {
+                        map.entry(specific_id.clone())
+                            .or_default()
+                            .push(general_id.clone());
+                    }
+                }
+            }
+        }
+
+        Self {
+            direct_supertypes: map,
+        }
+    }
+
+    /// Get the direct supertypes for a type.
+    fn supertypes(&self, type_id: &ElementId) -> &[ElementId] {
+        self.direct_supertypes
+            .get(type_id)
+            .map(|v| &v[..])
+            .unwrap_or(&[])
     }
 }
 
@@ -530,6 +640,15 @@ pub struct ResolutionContext<'a> {
     inheriting: bool,
     /// Collected diagnostics.
     diagnostics: Diagnostics,
+    /// Cache for resolved import targets (qualified name -> resolved ElementId).
+    /// Uses RefCell for interior mutability since resolve_import_target is called from &self contexts.
+    import_cache: RefCell<HashMap<String, Option<ElementId>>>,
+    /// Negative lookup cache: (namespace_id, name) pairs that have already failed resolution.
+    /// Avoids redundant parent-walking for names that don't exist anywhere.
+    failed_lookups: RefCell<HashSet<(ElementId, String)>>,
+    /// Pre-computed inheritance index for O(1) supertype lookup.
+    /// Lazily built on first use.
+    inheritance_index: Option<InheritanceIndex>,
 }
 
 impl<'a> ResolutionContext<'a> {
@@ -542,6 +661,19 @@ impl<'a> ResolutionContext<'a> {
             inside_scope: None,
             inheriting: false,
             diagnostics: Diagnostics::new(),
+            import_cache: RefCell::new(HashMap::new()),
+            failed_lookups: RefCell::new(HashSet::new()),
+            inheritance_index: None,
+        }
+    }
+
+    /// Ensure the inheritance index is built.
+    ///
+    /// This is called lazily on first use to avoid building the index
+    /// if inheritance expansion is never needed.
+    fn ensure_inheritance_index(&mut self) {
+        if self.inheritance_index.is_none() {
+            self.inheritance_index = Some(InheritanceIndex::build(self.graph));
         }
     }
 
@@ -586,12 +718,60 @@ impl<'a> ResolutionContext<'a> {
         }
     }
 
-    /// Get or create a scope table for a namespace.
+    /// Get or create a scope table for a namespace (owned members only).
     pub fn get_scope_table(&mut self, namespace_id: &ElementId) -> &ScopeTable {
         if !self.scope_tables.contains_key(namespace_id) {
             let table = self.build_scope_table(namespace_id);
             self.scope_tables.insert(namespace_id.clone(), table);
         }
+        self.scope_tables.get(namespace_id).unwrap()
+    }
+
+    /// Get or create a FULL scope table for a namespace.
+    ///
+    /// This includes:
+    /// - Owned members (populated immediately)
+    /// - Inherited members (populated on first call)
+    /// - Imported members (populated on first call)
+    ///
+    /// This is the main entry point for name resolution - using this cached
+    /// table avoids rebuilding inherited/imported lookups on every call.
+    pub fn get_full_scope_table(&mut self, namespace_id: &ElementId) -> &ScopeTable {
+        // Check if we need to populate inherited/imported
+        let needs_inherited = self.scope_tables.get(namespace_id)
+            .map(|t| !t.has_inherited_populated())
+            .unwrap_or(true);
+        let needs_imported = self.scope_tables.get(namespace_id)
+            .map(|t| !t.has_imported_populated())
+            .unwrap_or(true);
+
+        if needs_inherited || needs_imported {
+            // Build or get owned members first
+            if !self.scope_tables.contains_key(namespace_id) {
+                let table = self.build_scope_table(namespace_id);
+                self.scope_tables.insert(namespace_id.clone(), table);
+            }
+
+            // Now expand inherited and imported into the cached table
+            // We need to remove the table, modify it, and reinsert due to borrow rules
+            let mut table = self.scope_tables.remove(namespace_id).unwrap();
+
+            if needs_inherited {
+                let redefined = self.collect_redefined_names(namespace_id);
+                let mut visited = HashSet::new();
+                self.expand_inherited(namespace_id, &mut table, &mut visited, &redefined, 0);
+                table.set_inherited_populated();
+            }
+
+            if needs_imported {
+                let mut visited = HashSet::new();
+                self.expand_imports(namespace_id, &mut table, &mut visited);
+                table.set_imported_populated();
+            }
+
+            self.scope_tables.insert(namespace_id.clone(), table);
+        }
+
         self.scope_tables.get(namespace_id).unwrap()
     }
 
@@ -702,7 +882,31 @@ impl<'a> ResolutionContext<'a> {
     }
 
     /// Resolve the target of an import reference.
+    ///
+    /// Results are cached in `import_cache` to avoid redundant qualified name resolution
+    /// when the same import target is referenced multiple times.
     fn resolve_import_target(&self, ref_name: &str) -> Option<ElementId> {
+        // Check cache first
+        {
+            let cache = self.import_cache.borrow();
+            if let Some(cached) = cache.get(ref_name) {
+                return cached.clone();
+            }
+        }
+
+        // Cache miss - perform resolution
+        let result = self.resolve_import_target_uncached(ref_name);
+
+        // Cache the result (including None for negative caching)
+        self.import_cache
+            .borrow_mut()
+            .insert(ref_name.to_string(), result.clone());
+
+        result
+    }
+
+    /// Inner implementation of import target resolution (uncached).
+    fn resolve_import_target_uncached(&self, ref_name: &str) -> Option<ElementId> {
         // Try to resolve as a qualified name from root
         let segments = Self::parse_qualified_name_segments(ref_name);
         if segments.is_empty() {
@@ -801,13 +1005,21 @@ impl<'a> ResolutionContext<'a> {
     ///
     /// This processes all Specialization elements that have this Type as the
     /// specific type and adds the general type's members to the scope table.
+    ///
+    /// The `depth` parameter prevents infinite recursion in pathological cases.
     fn expand_inherited(
         &self,
         type_id: &ElementId,
         table: &mut ScopeTable,
         visited: &mut HashSet<ElementId>,
         redefined: &HashSet<String>,
+        depth: usize,
     ) {
+        // Safety limit to prevent infinite recursion
+        if depth > MAX_INHERITANCE_DEPTH {
+            return;
+        }
+
         // Check if this is a Type (only Types can have specializations)
         let type_element = match self.graph.get_element(type_id) {
             Some(e) => e,
@@ -838,42 +1050,43 @@ impl<'a> ResolutionContext<'a> {
             .collect();
 
         for spec in specializations {
-            // Get the general (supertype) reference
-            // First try unresolved reference, then try to resolve from resolved ID
-            let general_ref: Option<String> = spec
+            // FI-2 FIX: Prioritize already-resolved ElementId to avoid losing package context.
+            // When `PackageB::Derived :> PackageA::Base` is resolved, we should use the
+            // resolved ElementId directly instead of extracting "Base" and re-resolving it
+            // (which would fail without an import from PackageB to PackageA).
+            let general_id: Option<ElementId> = spec
                 .props
-                .get(unresolved_props::GENERAL)
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
+                .get(resolved_props::GENERAL)
+                .and_then(|v| v.as_ref())
+                .cloned()
+                // Fallback: resolve unresolved name if not yet resolved
                 .or_else(|| {
-                    spec.props
-                        .get(resolved_props::GENERAL)
-                        .and_then(|v| v.as_ref())
-                        .and_then(|id| self.graph.get_element(id))
-                        .and_then(|e| e.name.clone())
+                    let ref_name = spec
+                        .props
+                        .get(unresolved_props::GENERAL)
+                        .and_then(|v| v.as_str())?;
+
+                    // Try qualified name resolution, then library packages
+                    self.resolve_import_target(ref_name)
+                        .or_else(|| self.resolve_in_library_packages(ref_name))
                 });
 
-            if let Some(ref_name) = general_ref {
-                // Try to resolve the general type using full resolution
-                // First try qualified name resolution, then simple name in library
-                let general_id = self
-                    .resolve_import_target(&ref_name)
-                    .or_else(|| self.resolve_in_library_packages(&ref_name));
-
-                if let Some(gid) = general_id {
-                    // Add inherited members from the general type
-                    self.add_inherited_members(&gid, table, visited, redefined);
-                }
+            if let Some(gid) = general_id {
+                // Add inherited members from the general type
+                self.add_inherited_members(&gid, table, visited, redefined, depth);
             }
         }
     }
     /// Add members from a supertype to the inherited section of the scope table.
+    ///
+    /// The `depth` parameter is passed through to prevent infinite recursion.
     fn add_inherited_members(
         &self,
         supertype_id: &ElementId,
         table: &mut ScopeTable,
         visited: &mut HashSet<ElementId>,
         redefined: &HashSet<String>,
+        depth: usize,
     ) {
         // Get public and protected members from supertype
         for membership in self.graph.memberships(supertype_id) {
@@ -904,7 +1117,7 @@ impl<'a> ResolutionContext<'a> {
         }
 
         // Recursively add inherited members from supertype's supertypes
-        self.expand_inherited(supertype_id, table, visited, redefined);
+        self.expand_inherited(supertype_id, table, visited, redefined, depth + 1);
     }
 
     /// Collect redefined feature names from a type.
@@ -949,52 +1162,59 @@ impl<'a> ResolutionContext<'a> {
     }
 
     /// Inner resolution logic.
+    ///
+    /// Uses negative lookup caching to avoid re-walking parent hierarchies
+    /// for names that have already failed resolution from a given namespace.
     fn resolve_name_inner(&mut self, namespace_id: &ElementId, name: &str) -> Option<ElementId> {
+        // Check negative cache first - avoid redundant parent walking for known failures
+        {
+            let cache = self.failed_lookups.borrow();
+            if cache.contains(&(namespace_id.clone(), name.to_string())) {
+                return None;
+            }
+        }
+
         // 0. PRIMITIVE ALIASES: Check if this is a primitive type alias
         // e.g., "float" -> "Real", "int" -> "Integer"
         if let Some(canonical) = primitive_type_alias(name) {
-            return self.resolve_name_inner(namespace_id, canonical);
+            let result = self.resolve_name_inner(namespace_id, canonical);
+            // If the canonical name failed, also cache the alias as failed
+            if result.is_none() {
+                self.failed_lookups
+                    .borrow_mut()
+                    .insert((namespace_id.clone(), name.to_string()));
+            }
+            return result;
         }
 
-        // 1. OWNED: Check local owned members
-        {
-            // Need to clone to avoid borrow issues
-            let table = self.get_scope_table(namespace_id).clone();
+        // Use the cached full scope table (owned + inherited + imported)
+        // This avoids rebuilding the table on every lookup - critical for performance!
+        // We do lookups first, then extract parent_id to avoid keeping borrow alive
+        let (_found_in_table, parent_id) = {
+            let table = self.get_full_scope_table(namespace_id);
+
+            // 1. OWNED: Check local owned members
             if let Some(id) = table.lookup_owned(name) {
                 return Some(id.clone());
             }
-        }
 
-        // 2. INHERITED: Check inherited members (for Types)
-        {
-            // Collect redefined names to exclude from inheritance
-            let redefined = self.collect_redefined_names(namespace_id);
-
-            // Build scope table with inherited members
-            let mut table = ScopeTable::new();
-            let mut visited = HashSet::new();
-            self.expand_inherited(namespace_id, &mut table, &mut visited, &redefined);
-
+            // 2. INHERITED: Check inherited members (for Types)
             if let Some(id) = table.lookup_inherited(name) {
                 return Some(id.clone());
             }
-        }
 
-        // 3. IMPORTED: Check imported members
-        {
-            // Build a scope table with imports expanded
-            let mut table = self.build_scope_table(namespace_id);
-            let mut visited = HashSet::new();
-            self.expand_imports(namespace_id, &mut table, &mut visited);
-
+            // 3. IMPORTED: Check imported members
             if let Some(id) = table.lookup_imported(name) {
                 return Some(id.clone());
             }
-        }
+
+            // Get parent ID while we have immutable borrow
+            (false, self.graph.owner_of(namespace_id).map(|e| e.id.clone()))
+        };
 
         // 4. PARENT: Walk up to parent namespace
-        if let Some(owner) = self.graph.owner_of(namespace_id) {
-            if let Some(id) = self.resolve_name(&owner.id, name) {
+        if let Some(owner_id) = parent_id {
+            if let Some(id) = self.resolve_name(&owner_id, name) {
                 return Some(id);
             }
         }
@@ -1011,6 +1231,11 @@ impl<'a> ResolutionContext<'a> {
         if let Some(id) = self.resolve_in_library_packages(name) {
             return Some(id);
         }
+
+        // Cache this failure to avoid re-walking from this namespace for this name
+        self.failed_lookups
+            .borrow_mut()
+            .insert((namespace_id.clone(), name.to_string()));
 
         None
     }
@@ -1147,6 +1372,86 @@ impl<'a> ResolutionContext<'a> {
         None
     }
 
+    /// Check if a name is a pure feature chain (contains '.' but not '::').
+    ///
+    /// Feature chains are dot-separated paths like `vehicle.engine.pistons` that
+    /// require feature chaining resolution (each segment is resolved in the type
+    /// of the previous segment).
+    ///
+    /// Names containing `::` are qualified names and should be handled by
+    /// `resolve_qualified_name` even if they also contain dots (e.g., `A::B.c`).
+    ///
+    /// # Examples
+    /// - `"a.b"` → true (pure feature chain)
+    /// - `"a.b.c"` → true (pure feature chain)
+    /// - `"A::B"` → false (qualified name)
+    /// - `"A::B.c"` → false (qualified name with feature access - not pure chain)
+    /// - `"simple"` → false (simple name)
+    /// - `"'a.b'"` → false (dot is inside quotes)
+    fn is_feature_chain(name: &str) -> bool {
+        // If it contains ::, it's a qualified name, not a pure feature chain
+        // (even if it also has dots like A::B.c)
+        if name.contains("::") {
+            return false;
+        }
+
+        let mut in_quotes = false;
+        for c in name.chars() {
+            match c {
+                '\'' => in_quotes = !in_quotes,
+                '.' if !in_quotes => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Split a feature chain into segments by '.', respecting quoted names.
+    ///
+    /// Returns an iterator to avoid allocation in the common case.
+    ///
+    /// # Examples
+    /// - `"a.b.c"` → `["a", "b", "c"]`
+    /// - `"'a.b'.c"` → `["'a.b'", "c"]`
+    fn split_feature_chain_segments(chain: &str) -> impl Iterator<Item = &str> {
+        struct ChainIter<'a> {
+            remaining: &'a str,
+        }
+
+        impl<'a> Iterator for ChainIter<'a> {
+            type Item = &'a str;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.remaining.is_empty() {
+                    return None;
+                }
+
+                let mut in_quotes = false;
+                let mut end = 0;
+
+                for (i, c) in self.remaining.char_indices() {
+                    match c {
+                        '\'' => in_quotes = !in_quotes,
+                        '.' if !in_quotes => {
+                            let segment = &self.remaining[..i];
+                            self.remaining = &self.remaining[i + 1..];
+                            return Some(segment);
+                        }
+                        _ => {}
+                    }
+                    end = i + c.len_utf8();
+                }
+
+                // Last segment
+                let segment = &self.remaining[..end];
+                self.remaining = "";
+                Some(segment)
+            }
+        }
+
+        ChainIter { remaining: chain }
+    }
+
     /// Parse a qualified name into segments, respecting quoted names.
     ///
     /// Handles cases like "DataFunctions::'/'" where the segment contains `::`.
@@ -1196,15 +1501,69 @@ impl<'a> ResolutionContext<'a> {
         name == target
     }
 
-    /// Resolve a qualified name (e.g., "Package::SubPackage::Element").
+    /// Resolve a feature chain reference (dot-separated path like "a.b.c").
+    ///
+    /// Feature chains are used in expressions like `vehicle.engine.pistons` where
+    /// each segment after the first is resolved in the type of the previous segment.
+    ///
+    /// # Algorithm
+    /// 1. Split chain into segments by '.'
+    /// 2. Resolve first segment in current scope (normal name resolution)
+    /// 3. For each subsequent segment, use feature chaining strategy
+    ///
+    /// # Performance
+    /// O(m * (k + d)) where:
+    /// - m = number of segments in chain
+    /// - k = average owned features per type
+    /// - d = average inheritance depth
+    ///
+    /// Uses O(1) reverse indexes for type and specialization lookups.
+    pub fn resolve_feature_chain(
+        &mut self,
+        namespace_id: &ElementId,
+        chain: &str,
+    ) -> Option<ElementId> {
+        let mut segments = Self::split_feature_chain_segments(chain);
+
+        // Step 1: Resolve first segment in normal scope
+        let first_segment = segments.next()?;
+        let mut current_id = self.resolve_name(namespace_id, first_segment)?;
+
+        // Step 2: For each subsequent segment, use feature chaining
+        for segment in segments {
+            let resolution =
+                scoping::resolve_with_feature_chaining(self.graph, &current_id, segment);
+            match resolution {
+                scoping::ScopedResolution::Found(id) => {
+                    current_id = id;
+                }
+                _ => {
+                    return None;
+                }
+            }
+        }
+
+        Some(current_id)
+    }
+
+    /// Resolve a qualified name (e.g., "Package::SubPackage::Element") or feature chain (e.g., "a.b.c").
     ///
     /// Starts from the given namespace and resolves each segment.
     /// If local resolution fails for the first segment, falls back to global resolution.
+    ///
+    /// # Feature Chains
+    /// If the name contains '.' (outside of quotes), it's treated as a feature chain
+    /// and resolved using feature chaining strategy.
     pub fn resolve_qualified_name(
         &mut self,
         namespace_id: &ElementId,
         qname: &str,
     ) -> Option<ElementId> {
+        // Check for feature chain (contains '.' not in quotes)
+        if Self::is_feature_chain(qname) {
+            return self.resolve_feature_chain(namespace_id, qname);
+        }
+
         let segments = Self::parse_qualified_name_segments(qname);
         if segments.is_empty() {
             return None;
@@ -1519,6 +1878,181 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
     }
 
     // Record unresolved references as diagnostics
+    for (element_id, prop_name, unresolved_name) in unresolved {
+        let span = graph
+            .get_element(&element_id)
+            .and_then(|e| e.spans.first().cloned());
+
+        let mut diag = Diagnostic::error(format!(
+            "Unresolved reference '{}' for property '{}'",
+            unresolved_name, prop_name
+        ));
+
+        if let Some(s) = span {
+            diag = diag.with_span(s);
+        }
+
+        result.diagnostics.push(diag);
+        result.unresolved_count += 1;
+    }
+
+    result
+}
+
+/// Resolve all cross-references in a model graph, excluding specified elements.
+///
+/// This is useful when resolving user-defined elements while excluding library
+/// elements that have already been resolved.
+///
+/// # Arguments
+///
+/// * `graph` - The model graph to resolve (mutable)
+/// * `exclude_ids` - Set of element IDs to skip during resolution
+///
+/// # Returns
+///
+/// A `ResolutionResult` containing statistics and diagnostics.
+pub fn resolve_references_excluding(
+    graph: &mut ModelGraph,
+    exclude_ids: &std::collections::HashSet<ElementId>,
+) -> ResolutionResult {
+    let mut result = ResolutionResult::new();
+
+    // Collect elements that need resolution, excluding specified IDs
+    let elements_to_resolve: Vec<(ElementId, ElementKind)> = graph
+        .elements
+        .iter()
+        .filter(|(id, e)| !exclude_ids.contains(*id) && has_unresolved_refs(e))
+        .map(|(id, e)| (id.clone(), e.kind.clone()))
+        .collect();
+
+    // Create a resolution context
+    let mut updates: Vec<(ElementId, String, ElementId)> = Vec::new();
+    let mut unresolved: Vec<(ElementId, String, String)> = Vec::new();
+
+    {
+        let ctx_graph = &*graph;
+        let mut ctx = ResolutionContext::new(ctx_graph);
+
+        for (element_id, kind) in &elements_to_resolve {
+            let scope_id = ctx_graph
+                .get_element(element_id)
+                .and_then(|e| e.owner.clone())
+                .unwrap_or_else(|| element_id.clone());
+
+            let element = match ctx_graph.get_element(element_id) {
+                Some(e) => e,
+                None => continue,
+            };
+
+            // Resolve based on element kind (same logic as resolve_references)
+            match kind {
+                k if k == &ElementKind::Redefinition
+                    || k.is_subtype_of(ElementKind::Redefinition) =>
+                {
+                    resolve_redefinition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::ReferenceSubsetting
+                    || k.is_subtype_of(ElementKind::ReferenceSubsetting) =>
+                {
+                    resolve_reference_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Subsetting
+                    || k.is_subtype_of(ElementKind::Subsetting) =>
+                {
+                    resolve_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::FeatureTyping
+                    || k.is_subtype_of(ElementKind::FeatureTyping) =>
+                {
+                    resolve_feature_typing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Specialization
+                    || k.is_subtype_of(ElementKind::Specialization) =>
+                {
+                    resolve_specialization(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Dependency
+                    || k.is_subtype_of(ElementKind::Dependency) =>
+                {
+                    resolve_dependency(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Subclassification
+                    || k.is_subtype_of(ElementKind::Subclassification) =>
+                {
+                    resolve_subclassification(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Conjugation
+                    || k.is_subtype_of(ElementKind::Conjugation) =>
+                {
+                    resolve_conjugation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::TypeFeaturing
+                    || k.is_subtype_of(ElementKind::TypeFeaturing) =>
+                {
+                    resolve_type_featuring(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Disjoining
+                    || k.is_subtype_of(ElementKind::Disjoining) =>
+                {
+                    resolve_disjoining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Unioning
+                    || k.is_subtype_of(ElementKind::Unioning) =>
+                {
+                    resolve_unioning(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Intersecting
+                    || k.is_subtype_of(ElementKind::Intersecting) =>
+                {
+                    resolve_intersecting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Differencing
+                    || k.is_subtype_of(ElementKind::Differencing) =>
+                {
+                    resolve_differencing(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::FeatureInverting
+                    || k.is_subtype_of(ElementKind::FeatureInverting) =>
+                {
+                    resolve_feature_inverting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::FeatureChaining
+                    || k.is_subtype_of(ElementKind::FeatureChaining) =>
+                {
+                    resolve_feature_chaining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Annotation
+                    || k.is_subtype_of(ElementKind::Annotation) =>
+                {
+                    resolve_annotation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::Membership
+                    || k.is_subtype_of(ElementKind::Membership) =>
+                {
+                    resolve_membership(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                k if k == &ElementKind::ConjugatedPortDefinition
+                    || k.is_subtype_of(ElementKind::ConjugatedPortDefinition) =>
+                {
+                    resolve_conjugated_port_definition(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                }
+                _ => {}
+            }
+        }
+
+        result.diagnostics = ctx.take_diagnostics();
+    }
+
+    // Apply updates
+    for (element_id, prop_name, resolved_id) in updates {
+        if let Some(element) = graph.elements.get_mut(&element_id) {
+            element.set_prop(&prop_name, crate::Value::Ref(resolved_id));
+            result.resolved_count += 1;
+        }
+    }
+
+    // Record unresolved references
     for (element_id, prop_name, unresolved_name) in unresolved {
         let span = graph
             .get_element(&element_id)
@@ -3174,5 +3708,156 @@ mod tests {
         assert_eq!(ctx.resolve_name(&user_id, "Integer"), Some(integer_id));
         assert_eq!(ctx.resolve_name(&user_id, "Base"), Some(base_id));
         assert_eq!(ctx.resolve_name(&user_id, "ScalarValues"), Some(scalar_id));
+    }
+
+    // === Feature Chain Resolution Tests ===
+
+    #[test]
+    fn test_is_feature_chain() {
+        // Pure feature chains (contain '.' outside quotes, no '::')
+        assert!(ResolutionContext::is_feature_chain("a.b"));
+        assert!(ResolutionContext::is_feature_chain("a.b.c"));
+        assert!(ResolutionContext::is_feature_chain("vehicle.engine.pistons"));
+
+        // Not feature chains
+        assert!(!ResolutionContext::is_feature_chain("A::B"));
+        assert!(!ResolutionContext::is_feature_chain("A::B::C"));
+        assert!(!ResolutionContext::is_feature_chain("simple"));
+        assert!(!ResolutionContext::is_feature_chain("'a.b'")); // Dot inside quotes
+        assert!(!ResolutionContext::is_feature_chain("'some.path'")); // All inside quotes
+        // Mixed qualified name with dot - NOT a pure feature chain
+        assert!(!ResolutionContext::is_feature_chain("A::B.c"));
+        assert!(!ResolutionContext::is_feature_chain("Package::Type.feature"));
+    }
+
+    #[test]
+    fn test_split_feature_chain_segments() {
+        // Simple cases
+        let segments: Vec<_> = ResolutionContext::split_feature_chain_segments("a.b.c").collect();
+        assert_eq!(segments, vec!["a", "b", "c"]);
+
+        let segments: Vec<_> = ResolutionContext::split_feature_chain_segments("x.y").collect();
+        assert_eq!(segments, vec!["x", "y"]);
+
+        // Single segment (no dots)
+        let segments: Vec<_> = ResolutionContext::split_feature_chain_segments("single").collect();
+        assert_eq!(segments, vec!["single"]);
+
+        // Quoted names with dots inside
+        let segments: Vec<_> =
+            ResolutionContext::split_feature_chain_segments("'a.b'.c").collect();
+        assert_eq!(segments, vec!["'a.b'", "c"]);
+
+        let segments: Vec<_> =
+            ResolutionContext::split_feature_chain_segments("a.'b.c'.d").collect();
+        assert_eq!(segments, vec!["a", "'b.c'", "d"]);
+    }
+
+    #[test]
+    fn test_resolve_feature_chain_simple() {
+        use crate::Value;
+
+        let mut graph = ModelGraph::new();
+
+        // Create Engine type with a 'pistons' feature
+        let engine_type = Element::new_with_kind(ElementKind::PartDefinition).with_name("Engine");
+        let engine_type_id = graph.add_element(engine_type);
+
+        // Use with_owner() + add_element() to populate owner_to_children index
+        // (required for children_of() which is used by resolve_feature_in_type)
+        let pistons = Element::new_with_kind(ElementKind::PartUsage)
+            .with_name("pistons")
+            .with_owner(engine_type_id.clone());
+        let pistons_id = graph.add_element(pistons);
+
+        // Create Vehicle package with an 'engine' feature typed by Engine
+        let vehicle_pkg = Element::new_with_kind(ElementKind::Package).with_name("VehiclePkg");
+        let vehicle_pkg_id = graph.add_element(vehicle_pkg);
+
+        // Use add_owned_element for engine feature (creates membership for scope resolution)
+        let engine_feature = Element::new_with_kind(ElementKind::PartUsage).with_name("engine");
+        let engine_feature_id =
+            graph.add_owned_element(engine_feature, vehicle_pkg_id.clone(), VisibilityKind::Public);
+
+        // FeatureTyping: engine : Engine
+        let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
+        typing.set_prop("typedFeature", Value::Ref(engine_feature_id.clone()));
+        typing.set_prop("type", Value::Ref(engine_type_id.clone()));
+        graph.add_element(typing);
+
+        // Resolve "engine.pistons" from VehiclePkg
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_feature_chain(&vehicle_pkg_id, "engine.pistons");
+
+        assert_eq!(resolved, Some(pistons_id));
+    }
+
+    #[test]
+    fn test_resolve_feature_chain_via_qualified_name() {
+        use crate::Value;
+
+        let mut graph = ModelGraph::new();
+
+        // Create Engine type with a 'pistons' feature
+        let engine_type = Element::new_with_kind(ElementKind::PartDefinition).with_name("Engine");
+        let engine_type_id = graph.add_element(engine_type);
+
+        // Use with_owner() + add_element() to populate owner_to_children index
+        let pistons = Element::new_with_kind(ElementKind::PartUsage)
+            .with_name("pistons")
+            .with_owner(engine_type_id.clone());
+        let pistons_id = graph.add_element(pistons);
+
+        // Create Vehicle package with an 'engine' feature typed by Engine
+        let vehicle_pkg = Element::new_with_kind(ElementKind::Package).with_name("VehiclePkg");
+        let vehicle_pkg_id = graph.add_element(vehicle_pkg);
+
+        // Use add_owned_element for engine feature (creates membership for scope resolution)
+        let engine_feature = Element::new_with_kind(ElementKind::PartUsage).with_name("engine");
+        let engine_feature_id =
+            graph.add_owned_element(engine_feature, vehicle_pkg_id.clone(), VisibilityKind::Public);
+
+        // FeatureTyping: engine : Engine
+        let mut typing = Element::new_with_kind(ElementKind::FeatureTyping);
+        typing.set_prop("typedFeature", Value::Ref(engine_feature_id.clone()));
+        typing.set_prop("type", Value::Ref(engine_type_id.clone()));
+        graph.add_element(typing);
+
+        // resolve_qualified_name should automatically use feature chaining for "engine.pistons"
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_qualified_name(&vehicle_pkg_id, "engine.pistons");
+
+        assert_eq!(resolved, Some(pistons_id));
+    }
+
+    #[test]
+    fn test_resolve_feature_chain_not_found() {
+        let mut graph = ModelGraph::new();
+
+        // Create a simple package with a feature
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("TestPkg");
+        let pkg_id = graph.add_element(pkg);
+
+        // Use add_owned_element to create proper membership relationship
+        let feature = Element::new_with_kind(ElementKind::PartUsage).with_name("myFeature");
+        graph.add_owned_element(feature, pkg_id.clone(), VisibilityKind::Public);
+
+        // Try to resolve a non-existent chain
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_feature_chain(&pkg_id, "myFeature.nonExistent");
+
+        // Should fail because myFeature has no type
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn test_resolve_feature_chain_first_segment_not_found() {
+        let graph = ModelGraph::new();
+        let fake_id = ElementId::new_v4();
+
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_feature_chain(&fake_id, "nonExistent.field");
+
+        assert!(resolved.is_none());
     }
 }

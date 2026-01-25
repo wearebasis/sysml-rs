@@ -221,10 +221,11 @@ fn value_default_equals() {
         .collect();
     assert_eq!(attrs.len(), 1, "Expected 1 AttributeUsage");
 
-    // Verify value property is set
+    // Simple literals like `100` should NOT set unresolved_value because there's
+    // nothing to resolve - they are concrete values, not references.
+    // This prevents false "unresolved reference '100'" errors during resolution.
     let value = attrs[0].get_prop("unresolved_value");
-    assert!(value.is_some(), "unresolved_value property should be set");
-    assert_eq!(value.and_then(|v| v.as_str()), Some("100"), "value should be '100'");
+    assert!(value.is_none(), "unresolved_value should NOT be set for simple literals like '100'");
 
     // Should not have isDefault or isInitial for plain `=`
     assert!(attrs[0].get_prop("isDefault").is_none(), "isDefault should not be set for plain '='");
@@ -248,10 +249,11 @@ fn value_binding_colon_equals() {
         .collect();
     assert_eq!(attrs.len(), 1, "Expected 1 AttributeUsage");
 
-    // Verify value property is set
+    // Simple literals like `0` should NOT set unresolved_value because there's
+    // nothing to resolve - they are concrete values, not references.
+    // This prevents false "unresolved reference '0'" errors during resolution.
     let value = attrs[0].get_prop("unresolved_value");
-    assert!(value.is_some(), "unresolved_value property should be set");
-    assert_eq!(value.and_then(|v| v.as_str()), Some("0"), "value should be '0'");
+    assert!(value.is_none(), "unresolved_value should NOT be set for simple literals like '0'");
 
     // Should have isInitial set for `:=`
     let is_initial = attrs[0].get_prop("isInitial");

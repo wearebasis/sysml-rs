@@ -1,0 +1,101 @@
+// Minimal profiling script - time the key operations
+use std::time::Instant;
+use sysml_text::SysmlFile;
+use sysml_text_pest::PestParser;
+
+fn main() {
+    let corpus_path = std::env::var("SYSML_CORPUS_PATH")
+        .unwrap_or_else(|_| "/home/ricky/personal_repos/sysml-rs/sysmlv2-references".to_string());
+
+    let parser = PestParser::new();
+
+    // === Single File Test ===
+    println!("=== Single File Profile ===");
+    let test_file = format!("{}/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.domain/Quantities and Units/ISQSpaceTime.sysml", corpus_path);
+    let content = std::fs::read_to_string(&test_file).expect("Failed to read file");
+    println!("File size: {} bytes", content.len());
+
+    let file = SysmlFile {
+        path: test_file.clone(),
+        text: content.clone(),
+    };
+
+    let start = Instant::now();
+    let result = parser.parse_with_validation(&[file]);
+    println!("Parse time: {:?}", start.elapsed());
+
+    let mut graph = result.graph;
+    println!("Elements: {}", graph.elements.len());
+
+    let start = Instant::now();
+    let res = sysml_core::resolution::resolve_references(&mut graph);
+    println!("Resolution time: {:?}", start.elapsed());
+    println!("Resolved: {}, Unresolved: {}\n", res.resolved_count, res.unresolved_count);
+
+    // === Multi-File Test (5 files) ===
+    println!("=== Multi-File Profile (5 files) ===");
+    let test_files = [
+        "library.domain/Quantities and Units/ISQSpaceTime.sysml",
+        "library.domain/Quantities and Units/ISQMechanics.sysml",
+        "library.domain/Quantities and Units/ISQThermodynamics.sysml",
+        "library.domain/Quantities and Units/ISQElectromagnetism.sysml",
+        "library.domain/Quantities and Units/ISQLight.sysml",
+    ];
+
+    let files: Vec<SysmlFile> = test_files.iter().map(|f| {
+        let path = format!("{}/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/{}", corpus_path, f);
+        let text = std::fs::read_to_string(&path).expect(&format!("Failed to read {}", path));
+        SysmlFile { path, text }
+    }).collect();
+
+    let total_size: usize = files.iter().map(|f| f.text.len()).sum();
+    println!("Total size: {} bytes ({} files)", total_size, files.len());
+
+    let start = Instant::now();
+    let result = parser.parse_with_validation(&files);
+    println!("Parse time: {:?}", start.elapsed());
+
+    let mut graph = result.graph;
+    println!("Elements: {}", graph.elements.len());
+
+    let start = Instant::now();
+    let res = sysml_core::resolution::resolve_references(&mut graph);
+    println!("Resolution time: {:?}", start.elapsed());
+    println!("Resolved: {}, Unresolved: {}", res.resolved_count, res.unresolved_count);
+
+    // === Library-size test (10 files for quick check) ===
+    println!("\n=== Library-Size Profile (10 files) ===");
+    let test_files_10 = [
+        "library.domain/Quantities and Units/ISQSpaceTime.sysml",
+        "library.domain/Quantities and Units/ISQMechanics.sysml",
+        "library.domain/Quantities and Units/ISQThermodynamics.sysml",
+        "library.domain/Quantities and Units/ISQElectromagnetism.sysml",
+        "library.domain/Quantities and Units/ISQLight.sysml",
+        "library.domain/Quantities and Units/ISQAtomicNuclear.sysml",
+        "library.domain/Quantities and Units/ISQChemistryMolecular.sysml",
+        "library.domain/Quantities and Units/Quantities.sysml",
+        "library.domain/Quantities and Units/MeasurementReferences.sysml",
+        "library.domain/Quantities and Units/UnitsAndScales.sysml",
+    ];
+
+    let lib_files: Vec<SysmlFile> = test_files_10.iter().map(|f| {
+        let path = format!("{}/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/{}", corpus_path, f);
+        let text = std::fs::read_to_string(&path).expect(&format!("Failed to read {}", path));
+        SysmlFile { path, text }
+    }).collect();
+
+    let total_size: usize = lib_files.iter().map(|f| f.text.len()).sum();
+    println!("Total size: {} bytes ({} files)", total_size, lib_files.len());
+
+    let start = Instant::now();
+    let result = parser.parse_with_validation(&lib_files);
+    println!("Parse time: {:?}", start.elapsed());
+
+    let mut graph = result.graph;
+    println!("Elements: {}", graph.elements.len());
+
+    let start = Instant::now();
+    let res = sysml_core::resolution::resolve_references(&mut graph);
+    println!("Resolution time: {:?}", start.elapsed());
+    println!("Resolved: {}, Unresolved: {}", res.resolved_count, res.unresolved_count);
+}

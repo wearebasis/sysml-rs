@@ -185,6 +185,13 @@ pub fn load_standard_library<P: Parser>(
     // Register all root packages as library packages
     register_library_packages(&mut combined);
 
+    // Resolve internal library cross-references
+    // This is important because library files have imports between them
+    // (e.g., ISQThermodynamics imports MeasurementReferences::*)
+    let _resolution_result = sysml_core::resolution::resolve_references(&mut combined);
+    // Note: We don't fail on unresolved references in the library
+    // because some may depend on types not yet loaded
+
     if config.strict && total_errors > 0 {
         return Err(LibraryLoadError::ParseErrors(total_errors));
     }

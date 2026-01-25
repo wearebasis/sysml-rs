@@ -438,6 +438,9 @@ function updateContainerSizing(
 }
 
 function fitContainerToChildren(container: dia.Element): void {
+  if (container.get("sysmlRole") === "lifeline") {
+    return;
+  }
   if (isCollapsedContainer(container)) {
     container.resize(
       COLLAPSED_CONTAINER_SIZE.width,

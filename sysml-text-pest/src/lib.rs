@@ -105,7 +105,8 @@ impl PestParser {
         match SysmlGrammar::parse(Rule::File, &file.text) {
             Ok(pairs) => {
                 // Convert pest pairs to ModelGraph
-                let converter = ast::Converter::new(&file.path, self.include_spans);
+                // Pass source text for O(log n) line/column lookups via LineIndex
+                let converter = ast::Converter::new(&file.path, self.include_spans, Some(&file.text));
                 match converter.convert(pairs, &mut graph) {
                     Ok(()) => {}
                     Err(e) => {
@@ -161,6 +162,31 @@ impl PestParser {
         Diagnostic::error(message)
             .with_span(Span::with_location(file, 0, 0, line, col))
             .with_code("E001")
+    }
+}
+
+impl PestParser {
+    /// Parse files and run structural validation.
+    ///
+    /// This is equivalent to calling `parse()` followed by
+    /// `validate_structure()` and `validate_relationships()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let parser = PestParser::new();
+    /// let files = vec![SysmlFile::new("test.sysml", "...")];
+    /// let result = parser.parse_with_validation(&files);
+    /// if result.has_errors() {
+    ///     for diag in &result.diagnostics {
+    ///         eprintln!("{}", diag);
+    ///     }
+    /// }
+    /// ```
+    pub fn parse_with_validation(&self, files: &[SysmlFile]) -> ParseResult {
+        let mut result = self.parse(files);
+        result.validate_structure();
+        result.validate_relationships();
+        result
     }
 }
 
@@ -456,5 +482,39 @@ mod tests {
 
         // Should have parse errors
         assert!(result.has_errors());
+    }
+
+    // === Validation Integration Tests (Phase 5) ===
+
+    #[test]
+    fn parse_with_validation_valid_package() {
+        let parser = PestParser::new();
+        let files = vec![SysmlFile::new(
+            "test.sysml",
+            "package TestPackage { }",
+        )];
+        let result = parser.parse_with_validation(&files);
+
+        // Valid package should have no errors
+        if result.has_errors() {
+            for d in &result.diagnostics {
+                eprintln!("Error: {}", d);
+            }
+        }
+        assert!(result.is_ok(), "Valid package should pass validation");
+    }
+
+    #[test]
+    fn parse_with_validation_runs_validation() {
+        let parser = PestParser::new();
+        let files = vec![SysmlFile::new(
+            "test.sysml",
+            "package TestPackage { }",
+        )];
+
+        // parse_with_validation should complete without panic
+        let result = parser.parse_with_validation(&files);
+        // Just verify it ran - specific validation behavior is tested elsewhere
+        let _ = result.diagnostics.len();
     }
 }

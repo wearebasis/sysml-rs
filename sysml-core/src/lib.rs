@@ -323,6 +323,17 @@ pub struct ModelGraph {
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "FxHashSet::is_empty"))]
     library_packages: FxHashSet<ElementId>,
 
+    /// Pre-built index: name -> ElementId for all library members.
+    /// This enables O(1) lookup instead of O(n) recursive search.
+    /// Built lazily when library lookup is first needed.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    library_name_index: FxHashMap<String, ElementId>,
+
+    /// Whether the library name index needs to be rebuilt.
+    /// Set to true when library packages change or elements are added/removed.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    library_index_dirty: bool,
+
     #[cfg_attr(feature = "serde", serde(skip))]
     indexes_dirty: bool,
 }
@@ -341,6 +352,8 @@ impl ModelGraph {
             typed_feature_to_typings: FxHashMap::default(),
             specific_to_specializations: FxHashMap::default(),
             library_packages: FxHashSet::default(),
+            library_name_index: FxHashMap::default(),
+            library_index_dirty: true,
             indexes_dirty: false,
         }
     }
@@ -578,6 +591,8 @@ impl ModelGraph {
         self.typed_feature_to_typings.clear();
         self.specific_to_specializations.clear();
         self.library_packages.clear();
+        self.library_name_index.clear();
+        self.library_index_dirty = true;
         self.indexes_dirty = false;
     }
 
@@ -606,6 +621,8 @@ impl ModelGraph {
 
             if is_package && is_root {
                 self.library_packages.insert(package_id);
+                // Mark the library index as needing rebuild
+                self.library_index_dirty = true;
                 return true;
             }
         }
@@ -632,6 +649,156 @@ impl ModelGraph {
         self.library_packages
             .iter()
             .filter_map(move |id| self.elements.get(id))
+    }
+
+    /// Build the library name index for O(1) lookup of library members.
+    ///
+    /// This indexes all public members of all registered library packages,
+    /// including nested namespaces (recursively). The index maps names
+    /// to element IDs for fast resolution.
+    pub fn build_library_index(&mut self) {
+        self.library_name_index.clear();
+        let mut visited = FxHashSet::default();
+
+        // Clone the library_packages to avoid borrow issues
+        let lib_pkg_ids: Vec<ElementId> = self.library_packages.iter().cloned().collect();
+
+        for lib_pkg_id in lib_pkg_ids {
+            // Index the library package itself by name
+            if let Some(lib_pkg) = self.elements.get(&lib_pkg_id) {
+                if let Some(name) = &lib_pkg.name {
+                    self.library_name_index
+                        .insert(name.clone(), lib_pkg_id.clone());
+                }
+            }
+            // Recursively index all members
+            self.index_library_recursively(&lib_pkg_id, &mut visited);
+        }
+
+        // Mark the index as up-to-date
+        self.library_index_dirty = false;
+    }
+
+    /// Recursively index library namespace members.
+    ///
+    /// Adds all public members to the library_name_index, including nested namespaces.
+    fn index_library_recursively(
+        &mut self,
+        namespace_id: &ElementId,
+        visited: &mut FxHashSet<ElementId>,
+    ) {
+        if !visited.insert(namespace_id.clone()) {
+            return; // Already visited, prevent cycles
+        }
+
+        // Collect membership info to avoid borrow issues
+        let members_to_index: Vec<(String, ElementId, bool)> = {
+            let membership_ids = self.namespace_to_memberships.get(namespace_id);
+            membership_ids
+                .into_iter()
+                .flat_map(|ids| ids.iter())
+                .filter_map(|membership_id| self.elements.get(membership_id))
+                .filter_map(|membership| {
+                    // Check visibility - only index public members
+                    let visibility = membership
+                        .props
+                        .get("visibility")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("public");
+                    if visibility != "public" {
+                        return None;
+                    }
+
+                    // Get member element ID
+                    let member_id = membership
+                        .props
+                        .get("memberElement")
+                        .and_then(|v| v.as_ref())?;
+
+                    // Get member name from membership or element
+                    let member_name = membership
+                        .props
+                        .get("memberName")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            self.elements
+                                .get(member_id)
+                                .and_then(|e| e.name.clone())
+                        })?;
+
+                    // Check if member is a namespace (needs recursive indexing)
+                    let is_namespace = self.elements.get(member_id).map_or(false, |e| {
+                        e.kind == ElementKind::Package
+                            || e.kind == ElementKind::Namespace
+                            || e.kind.is_subtype_of(ElementKind::Namespace)
+                    });
+
+                    Some((member_name, member_id.clone(), is_namespace))
+                })
+                .collect()
+        };
+
+        // Add members to index and recurse into namespaces
+        for (name, member_id, is_namespace) in members_to_index {
+            // Also index without quotes if the name is quoted
+            let stripped = name.trim_matches('\'');
+            if stripped != name {
+                self.library_name_index
+                    .entry(stripped.to_string())
+                    .or_insert(member_id.clone());
+            }
+
+            // Insert into index (first occurrence wins)
+            self.library_name_index.entry(name).or_insert(member_id.clone());
+
+            // Recurse into nested namespaces
+            if is_namespace {
+                self.index_library_recursively(&member_id, visited);
+            }
+        }
+    }
+
+    /// Ensure the library name index is built and up-to-date.
+    ///
+    /// Call this before starting resolution to enable O(1) library lookups.
+    /// This is called automatically by `resolve_references()`.
+    pub fn ensure_library_index(&mut self) {
+        if self.library_index_dirty && !self.library_packages.is_empty() {
+            self.build_library_index();
+        }
+    }
+
+    /// Resolve a name in the library index with O(1) lookup.
+    ///
+    /// Note: Call `ensure_library_index()` before resolution to build the index.
+    /// Returns the ElementId if found, None otherwise.
+    pub fn resolve_in_library(&self, name: &str) -> Option<&ElementId> {
+        // Try exact match first
+        if let Some(id) = self.library_name_index.get(name) {
+            return Some(id);
+        }
+        // Try with quotes stripped
+        let stripped = name.trim_matches('\'');
+        if stripped != name {
+            if let Some(id) = self.library_name_index.get(stripped) {
+                return Some(id);
+            }
+        }
+        // Try with quotes added
+        let quoted = format!("'{}'", stripped);
+        if quoted != name {
+            self.library_name_index.get(&quoted)
+        } else {
+            None
+        }
+    }
+
+    /// Check if the library name index needs rebuilding.
+    ///
+    /// Used by resolution to determine if index should be built.
+    pub fn library_index_needs_rebuild(&self) -> bool {
+        self.library_index_dirty && !self.library_packages.is_empty()
     }
 
     /// Add an element as a library package.
@@ -698,8 +865,78 @@ impl ModelGraph {
             self.library_packages.insert(id);
         }
 
-        // Mark indexes as needing rebuild
-        self.indexes_dirty = true;
+        // Merge indexes from the other graph to preserve pre-built index data.
+        // This is critical for library merging: the library's namespace_to_memberships
+        // index enables build_library_index() to work correctly.
+
+        // Merge namespace_to_memberships index
+        for (ns_id, membership_ids) in other.namespace_to_memberships {
+            self.namespace_to_memberships
+                .entry(ns_id)
+                .or_default()
+                .extend(membership_ids);
+        }
+
+        // Merge owner_to_children index
+        for (owner_id, child_ids) in other.owner_to_children {
+            self.owner_to_children
+                .entry(owner_id)
+                .or_default()
+                .extend(child_ids);
+        }
+
+        // Merge element_to_owning_membership index
+        for (elem_id, membership_id) in other.element_to_owning_membership {
+            self.element_to_owning_membership
+                .entry(elem_id)
+                .or_insert(membership_id);
+        }
+
+        // Merge typed_feature_to_typings index
+        for (feature_id, typing_ids) in other.typed_feature_to_typings {
+            self.typed_feature_to_typings
+                .entry(feature_id)
+                .or_default()
+                .extend(typing_ids);
+        }
+
+        // Merge specific_to_specializations index
+        for (specific_id, spec_ids) in other.specific_to_specializations {
+            self.specific_to_specializations
+                .entry(specific_id)
+                .or_default()
+                .extend(spec_ids);
+        }
+
+        // Merge source_to_rels and target_to_rels indexes
+        for (source_id, rel_ids) in other.source_to_rels {
+            self.source_to_rels
+                .entry(source_id)
+                .or_default()
+                .extend(rel_ids);
+        }
+        for (target_id, rel_ids) in other.target_to_rels {
+            self.target_to_rels
+                .entry(target_id)
+                .or_default()
+                .extend(rel_ids);
+        }
+
+        // Merge library_name_index if the other graph had one built
+        if !other.library_name_index.is_empty() {
+            for (name, elem_id) in other.library_name_index {
+                self.library_name_index.entry(name).or_insert(elem_id);
+            }
+        }
+
+        // Note: We don't mark indexes_dirty since we've properly merged them.
+        // The indexes are now consistent with the merged elements/relationships.
+
+        // Mark library index as needing rebuild if we added library packages
+        // (to index newly registered library packages)
+        if as_library {
+            self.library_index_dirty = true;
+        }
 
         count
     }
@@ -1065,5 +1302,80 @@ mod tests {
         let _ = StateSubactionKind::default();
         let _ = TransitionFeatureKind::default();
         let _ = TriggerKind::default();
+    }
+
+    // === Tests for Phase 2e: Library Index Merge Fix ===
+
+    #[test]
+    fn merge_preserves_namespace_to_memberships() {
+        let mut graph1 = ModelGraph::new();
+        let mut graph2 = ModelGraph::new();
+
+        // Create a package in graph2
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("TestPkg");
+        let pkg_id = graph2.add_element(pkg);
+
+        // Create a member in graph2 with ownership via add_owned_element
+        let member = Element::new_with_kind(ElementKind::PartUsage).with_name("TestMember");
+        let _member_id = graph2.add_owned_element(member, pkg_id.clone(), VisibilityKind::Public);
+
+        // Verify graph2 has the namespace_to_memberships index entry
+        assert!(
+            graph2.namespace_to_memberships.contains_key(&pkg_id),
+            "graph2 should have namespace_to_memberships entry for the package"
+        );
+
+        // Merge graph2 into graph1
+        graph1.merge(graph2, false);
+
+        // Verify graph1 now has the index entry (critical for library resolution)
+        assert!(
+            graph1.namespace_to_memberships.contains_key(&pkg_id),
+            "After merge, graph1 should have namespace_to_memberships entry from graph2"
+        );
+    }
+
+    #[test]
+    fn merge_preserves_owner_to_children() {
+        let mut graph1 = ModelGraph::new();
+        let mut graph2 = ModelGraph::new();
+
+        // Create a package with a child in graph2
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("Parent");
+        let pkg_id = graph2.add_element(pkg);
+
+        let child = Element::new_with_kind(ElementKind::PartUsage)
+            .with_name("Child")
+            .with_owner(pkg_id.clone());
+        let child_id = graph2.add_element(child);
+
+        // Verify graph2 has the owner_to_children index
+        assert!(graph2.owner_to_children.get(&pkg_id).map_or(false, |children| children.contains(&child_id)));
+
+        // Merge and verify
+        graph1.merge(graph2, false);
+        assert!(
+            graph1.owner_to_children.get(&pkg_id).map_or(false, |children| children.contains(&child_id)),
+            "owner_to_children should be preserved after merge"
+        );
+    }
+
+    #[test]
+    fn merge_as_library_registers_root_packages() {
+        let mut graph1 = ModelGraph::new();
+        let mut graph2 = ModelGraph::new();
+
+        // Create a root package in graph2
+        let lib_pkg = Element::new_with_kind(ElementKind::Package).with_name("LibraryPkg");
+        let lib_pkg_id = graph2.add_element(lib_pkg);
+
+        // Merge as library
+        graph1.merge(graph2, true);
+
+        // Verify the package is registered as a library package
+        assert!(
+            graph1.is_library_package(&lib_pkg_id),
+            "Root packages should be registered as library packages when as_library=true"
+        );
     }
 }

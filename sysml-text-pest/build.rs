@@ -12,7 +12,9 @@ use std::path::{Path, PathBuf};
 
 use sysml_codegen::{
     extract_all_keyword_strings, generate_pest_enums, generate_pest_keywords_from_strings,
-    generate_pest_operators, parse_xtext_enums, parse_xtext_operators, validate_keyword_coverage,
+    generate_pest_operators, parse_ttl_vocab, parse_xtext_enums, parse_xtext_operators,
+    parse_xtext_rule_names, parse_xtext_rules, validate_expression_coverage,
+    validate_grammar_element_linkage, validate_keyword_coverage, validate_xtext_rule_coverage,
 };
 
 /// Paths to xtext specification files relative to the references directory.
@@ -49,6 +51,16 @@ fn main() {
 
     // Print rerun triggers for fragment files
     println!("cargo:rerun-if-changed=src/grammar/fragments/");
+
+    // Print rerun triggers for TTL vocab files (used for element linkage validation)
+    println!(
+        "cargo:rerun-if-changed={}",
+        refs_dir.join("Kerml-Vocab.ttl").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        refs_dir.join("SysML-vocab.ttl").display()
+    );
 
     // Load specification files
     let sysml_xtext = fs::read_to_string(refs_dir.join(SYSML_XTEXT_PATH))
@@ -181,6 +193,112 @@ fn main() {
             "Keyword-to-grammar validation failed!\n{}",
             validation.format_report()
         );
+    }
+
+    // Validate expression rule coverage
+    let expr_validation = validate_expression_coverage(&grammar);
+
+    if !expr_validation.missing_rules.is_empty() {
+        for rule in &expr_validation.missing_rules {
+            println!("cargo:warning=Missing expression rule: {}", rule);
+        }
+    }
+
+    // Also fail for strict validation if expression rules are missing
+    if env::var("SYSML_STRICT_VALIDATION").is_ok() && !expr_validation.is_valid() {
+        panic!(
+            "Expression coverage validation failed!\n{}",
+            expr_validation.format_report()
+        );
+    }
+
+    // Validate xtext rule coverage (compares xtext rule names to pest grammar rules)
+    // This helps catch parser gaps where xtext rules don't have pest equivalents
+    let mut xtext_rules = Vec::new();
+    xtext_rules.extend(parse_xtext_rule_names(&sysml_xtext));
+    xtext_rules.extend(parse_xtext_rule_names(&kerml_xtext));
+    xtext_rules.extend(parse_xtext_rule_names(&kerml_expr));
+
+    let xtext_coverage = validate_xtext_rule_coverage(&xtext_rules, &grammar);
+
+    // Report missing rules as warnings (informational, not blocking)
+    // Use SYSML_SHOW_MISSING_RULES=1 to see the full list
+    if env::var("SYSML_SHOW_MISSING_RULES").is_ok() && !xtext_coverage.missing_rules.is_empty() {
+        println!(
+            "cargo:warning=Xtext rule coverage: {}/{} rules",
+            xtext_coverage.covered_rules.len(),
+            xtext_coverage.covered_rules.len() + xtext_coverage.missing_rules.len()
+        );
+        for rule in &xtext_coverage.missing_rules {
+            println!("cargo:warning=Missing xtext rule: {}", rule);
+        }
+    }
+
+    // =====================================================================
+    // GRAMMAR-ELEMENT LINKAGE VALIDATION (Phase 1)
+    // =====================================================================
+    // Validate that every pest grammar rule producing an element has a
+    // matching ElementKind variant, and vice versa.
+    // =====================================================================
+
+    // Parse xtext rules with full return type information
+    let mut xtext_rules_full = Vec::new();
+    xtext_rules_full.extend(parse_xtext_rules(&sysml_xtext));
+    xtext_rules_full.extend(parse_xtext_rules(&kerml_xtext));
+    xtext_rules_full.extend(parse_xtext_rules(&kerml_expr));
+
+    // Load TTL vocabulary files to get ElementKind names
+    let kerml_vocab_path = refs_dir.join("Kerml-Vocab.ttl");
+    let sysml_vocab_path = refs_dir.join("SysML-vocab.ttl");
+
+    let element_kind_names = if kerml_vocab_path.exists() && sysml_vocab_path.exists() {
+        let kerml_vocab = fs::read_to_string(&kerml_vocab_path)
+            .expect("Failed to read Kerml-Vocab.ttl");
+        let sysml_vocab = fs::read_to_string(&sysml_vocab_path)
+            .expect("Failed to read SysML-vocab.ttl");
+
+        let kerml_types = parse_ttl_vocab(&kerml_vocab).unwrap_or_default();
+        let sysml_types = parse_ttl_vocab(&sysml_vocab).unwrap_or_default();
+
+        let mut names: Vec<String> = kerml_types
+            .iter()
+            .chain(sysml_types.iter())
+            .map(|t| t.name.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    } else {
+        println!("cargo:warning=TTL vocab files not found, skipping grammar-element linkage validation");
+        Vec::new()
+    };
+
+    if !element_kind_names.is_empty() {
+        let linkage = validate_grammar_element_linkage(
+            &xtext_rules_full,
+            &grammar,
+            &element_kind_names,
+        );
+
+        let (covered, total, percent) = linkage.coverage_stats();
+        println!(
+            "cargo:warning=Grammar-Element Linkage: {}/{} ElementKinds have grammar rules ({:.1}%)",
+            covered, total, percent
+        );
+
+        if !linkage.missing_element_kinds.is_empty() {
+            for rule in &linkage.missing_element_kinds {
+                println!("cargo:warning=Pest rule without ElementKind: {}", rule);
+            }
+        }
+
+        // Optionally fail build on strict validation
+        if env::var("SYSML_STRICT_VALIDATION").is_ok() && !linkage.is_valid() {
+            panic!(
+                "Grammar-Element Linkage validation failed!\n{}",
+                linkage.format_report()
+            );
+        }
     }
 
     // Also write to OUT_DIR for debugging/inspection

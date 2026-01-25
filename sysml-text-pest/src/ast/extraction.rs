@@ -40,6 +40,8 @@ pub struct UsageExtraction<'a> {
     pub value_expression: Option<String>,
     pub value_is_default: bool,
     pub value_is_initial: bool,
+    /// Whether the value is a literal (not a reference that needs resolution)
+    pub value_is_literal: bool,
 
     // === Feature specializations ===
     /// FeatureTyping targets (from `:` or `typed by` syntax)
@@ -359,9 +361,11 @@ impl<'a> UsageExtraction<'a> {
             self.value_is_initial = true;
         }
 
-        // Find OwnedExpression child
+        // Find OwnedExpression child and check if it's a literal
         for inner in pair.clone().into_inner() {
             if inner.as_rule() == Rule::OwnedExpression {
+                // Check if the expression is a literal
+                self.value_is_literal = Self::is_literal_expression(&inner);
                 self.value_expression = Some(inner.as_str().trim().to_string());
                 return;
             }
@@ -378,8 +382,81 @@ impl<'a> UsageExtraction<'a> {
             s = s.strip_prefix('=').unwrap_or(s).trim();
         }
         if !s.is_empty() {
+            // Check if the fallback value looks like a literal
+            self.value_is_literal = Self::text_looks_like_literal(s);
             self.value_expression = Some(s.to_string());
         }
+    }
+
+    /// Check if an OwnedExpression pair is a simple literal (not a complex expression).
+    ///
+    /// Returns true only if the expression IS a literal, not if it merely contains literals.
+    /// For example, `5` returns true, but `2 + 3` returns false (it's a binary expression).
+    fn is_literal_expression(pair: &Pair<'_, Rule>) -> bool {
+        // Check if this is a simple literal expression by looking at the structure.
+        // A pure literal will have the path: OwnedExpression -> ... -> LiteralExpression
+        // without any operator nodes in between.
+        fn is_simple_literal(pair: &Pair<'_, Rule>) -> bool {
+            match pair.as_rule() {
+                // These are the leaf literal types
+                Rule::LiteralExpression
+                | Rule::LiteralBoolean
+                | Rule::LiteralString
+                | Rule::LiteralNumber
+                | Rule::LiteralInfinity => true,
+
+                // Pass-through rules that can contain a literal
+                Rule::OwnedExpression
+                | Rule::ConditionalExpression
+                | Rule::NullCoalescingExpression
+                | Rule::ImpliesExpression
+                | Rule::OrExpression
+                | Rule::XorExpression
+                | Rule::AndExpression
+                | Rule::EqualityExpression
+                | Rule::ClassificationExpression
+                | Rule::RelationalExpression
+                | Rule::RangeExpression
+                | Rule::AdditiveExpression
+                | Rule::MultiplicativeExpression
+                | Rule::ExponentiationExpression
+                | Rule::UnaryExpression
+                | Rule::ExtentExpression
+                | Rule::PrimaryExpression
+                | Rule::BaseExpression
+                | Rule::SequenceExpression => {
+                    // Only continue if there's exactly one child and it's also simple
+                    let children: Vec<_> = pair.clone().into_inner().collect();
+                    children.len() == 1 && is_simple_literal(&children[0])
+                }
+
+                // Any other rule (operators, function calls, etc.) means it's complex
+                _ => false,
+            }
+        }
+        is_simple_literal(pair)
+    }
+
+    /// Check if text looks like a literal value (fallback heuristic).
+    fn text_looks_like_literal(text: &str) -> bool {
+        let s = text.trim();
+        // Boolean literals
+        if s == "true" || s == "false" {
+            return true;
+        }
+        // Infinity literal
+        if s == "*" {
+            return true;
+        }
+        // String literal (quoted)
+        if s.starts_with('"') && s.ends_with('"') {
+            return true;
+        }
+        // Number literal (integer or real)
+        if s.parse::<i64>().is_ok() || s.parse::<f64>().is_ok() {
+            return true;
+        }
+        false
     }
 
     /// Extract body children pairs for later processing.

@@ -798,6 +798,83 @@ impl Extend<Diagnostic> for Diagnostics {
     }
 }
 
+/// Pre-computed line offset table for O(log n) line/column lookups.
+///
+/// Pest's `Position::line_col()` is O(n) - it scans from byte 0 to the position,
+/// counting newlines. For a file with N tokens, this results in O(N²) total work.
+/// This struct pre-computes line offsets once, enabling O(log n) lookups via binary search.
+///
+/// # Examples
+///
+/// ```
+/// use sysml_span::LineIndex;
+///
+/// let source = "line 1\nline 2\nline 3";
+/// let index = LineIndex::new(source);
+///
+/// // Position at start of "line 2" (byte 7)
+/// assert_eq!(index.line_col(7), (2, 1));
+///
+/// // Position in middle of "line 3" (byte 17 = 'n' in "line")
+/// assert_eq!(index.line_col(17), (3, 4));
+/// ```
+#[derive(Debug, Clone)]
+pub struct LineIndex {
+    /// Byte offset of each line start. line_offsets[0] = 0 (first line starts at byte 0).
+    line_offsets: Vec<usize>,
+}
+
+impl LineIndex {
+    /// Build a line index from source text. O(n) one-time cost.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sysml_span::LineIndex;
+    ///
+    /// let index = LineIndex::new("a\nb\nc");
+    /// // 3 lines: starts at bytes 0, 2, 4
+    /// ```
+    pub fn new(source: &str) -> Self {
+        let mut offsets = vec![0];
+        for (i, c) in source.char_indices() {
+            if c == '\n' {
+                offsets.push(i + 1);
+            }
+        }
+        Self { line_offsets: offsets }
+    }
+
+    /// Convert byte offset to (line, column). O(log n) via binary search.
+    ///
+    /// Line and column are 1-indexed to match pest's convention and editor expectations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sysml_span::LineIndex;
+    ///
+    /// let index = LineIndex::new("hello\nworld");
+    /// assert_eq!(index.line_col(0), (1, 1));   // 'h'
+    /// assert_eq!(index.line_col(5), (1, 6));   // '\n'
+    /// assert_eq!(index.line_col(6), (2, 1));   // 'w'
+    /// assert_eq!(index.line_col(10), (2, 5));  // 'd'
+    /// ```
+    pub fn line_col(&self, offset: usize) -> (u32, u32) {
+        // partition_point returns the first index where offset < line_offsets[i]
+        // So line = partition_point gives us 1-indexed line number directly
+        let line = self.line_offsets.partition_point(|&o| o <= offset);
+        let line_start = self.line_offsets.get(line.saturating_sub(1)).copied().unwrap_or(0);
+        let col = offset - line_start + 1;
+        (line as u32, col as u32)
+    }
+
+    /// Get the number of lines in the indexed source.
+    pub fn line_count(&self) -> usize {
+        self.line_offsets.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -896,5 +973,54 @@ mod tests {
         let s = related.to_string();
         assert!(s.contains("file.sysml:5:3"));
         assert!(s.contains("defined here"));
+    }
+
+    // LineIndex tests
+
+    #[test]
+    fn line_index_single_line() {
+        let index = LineIndex::new("hello world");
+        assert_eq!(index.line_col(0), (1, 1));
+        assert_eq!(index.line_col(5), (1, 6));
+        assert_eq!(index.line_col(10), (1, 11));
+    }
+
+    #[test]
+    fn line_index_multiple_lines() {
+        let index = LineIndex::new("line 1\nline 2\nline 3");
+        // Line 1: bytes 0-6 ("line 1\n")
+        assert_eq!(index.line_col(0), (1, 1));
+        assert_eq!(index.line_col(5), (1, 6));
+        // Line 2: bytes 7-13 ("line 2\n")
+        assert_eq!(index.line_col(7), (2, 1));
+        assert_eq!(index.line_col(12), (2, 6));
+        // Line 3: bytes 14-19 ("line 3")
+        assert_eq!(index.line_col(14), (3, 1));
+        assert_eq!(index.line_col(19), (3, 6));
+    }
+
+    #[test]
+    fn line_index_empty() {
+        let index = LineIndex::new("");
+        // Empty string still has line 1
+        assert_eq!(index.line_count(), 1);
+    }
+
+    #[test]
+    fn line_index_newline_at_end() {
+        let index = LineIndex::new("hello\n");
+        assert_eq!(index.line_col(0), (1, 1));
+        assert_eq!(index.line_col(5), (1, 6)); // the newline character
+    }
+
+    #[test]
+    fn line_index_consecutive_newlines() {
+        let index = LineIndex::new("a\n\nb");
+        // Line 1: "a\n"
+        assert_eq!(index.line_col(0), (1, 1)); // 'a'
+        // Line 2: "\n" (empty line)
+        assert_eq!(index.line_col(2), (2, 1)); // second newline
+        // Line 3: "b"
+        assert_eq!(index.line_col(3), (3, 1)); // 'b'
     }
 }

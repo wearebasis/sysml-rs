@@ -27,17 +27,44 @@ declare global {
   }
 }
 
-const layoutOptions: LayoutStrategy[] = [
-  "auto",
-  "interconnection",
-  "manual",
-  "grid",
-  "layered",
-  "dagre",
-  "msagl",
-  "elk",
-];
-const routerOptions: RouterStrategy[] = ["default", "avoid"];
+const LAYOUT_OPTIONS_BY_VIEW: Record<VisSpecView, LayoutStrategy[]> = {
+  GeneralView: ["auto", "manual", "grid", "layered", "dagre", "msagl", "elk"],
+  InterconnectionView: [
+    "auto",
+    "interconnection",
+    "manual",
+    "grid",
+    "layered",
+    "dagre",
+    "msagl",
+    "elk",
+  ],
+  ActionFlowView: ["auto", "manual", "layered", "dagre", "msagl", "elk"],
+  StateTransitionView: ["auto", "manual", "layered", "dagre", "msagl", "elk"],
+  SequenceView: ["auto", "manual"],
+  BrowserView: ["auto"],
+  GridView: ["auto"],
+  GeometryView: ["manual"],
+};
+
+const ROUTER_OPTIONS_BY_VIEW: Record<VisSpecView, RouterStrategy[]> = {
+  GeneralView: ["default", "avoid"],
+  InterconnectionView: ["default", "avoid"],
+  ActionFlowView: ["default", "avoid"],
+  StateTransitionView: ["default", "avoid"],
+  SequenceView: ["default"],
+  BrowserView: ["default"],
+  GridView: ["default"],
+  GeometryView: ["default"],
+};
+
+function resolveLayoutOptions(view: VisSpecView): LayoutStrategy[] {
+  return LAYOUT_OPTIONS_BY_VIEW[view] ?? ["auto"];
+}
+
+function resolveRouterOptions(view: VisSpecView): RouterStrategy[] {
+  return ROUTER_OPTIONS_BY_VIEW[view] ?? ["default"];
+}
 
 export function startApp(): void {
   const app = document.getElementById("app");
@@ -78,12 +105,16 @@ export function startApp(): void {
 
   const selection = resolveFixtureSelection(viewParam, fixtureParam);
   const initialView = selection.view;
-  const initialLayout = layoutOptions.includes(layoutParam ?? "auto")
-    ? (layoutParam ?? "auto")
-    : "auto";
-  const initialRouter = routerOptions.includes(routerParam ?? "default")
-    ? (routerParam ?? "default")
-    : "default";
+  const layoutOptions = resolveLayoutOptions(initialView);
+  const routerOptions = resolveRouterOptions(initialView);
+  const fallbackLayout = layoutOptions[0] ?? "auto";
+  const fallbackRouter = routerOptions[0] ?? "default";
+  const initialLayout = layoutOptions.includes(layoutParam ?? fallbackLayout)
+    ? (layoutParam ?? fallbackLayout)
+    : fallbackLayout;
+  const initialRouter = routerOptions.includes(routerParam ?? fallbackRouter)
+    ? (routerParam ?? fallbackRouter)
+    : fallbackRouter;
   const initialLayoutAll = layoutAllParam === "1" || layoutAllParam === "true";
   const snapToGrid = snapParam === "1" || snapParam === "true";
   const showFrame = frameParam === "1" || frameParam === "true";
@@ -121,6 +152,8 @@ export function startApp(): void {
     initialLayout,
     initialRouter,
     initialLayoutAll,
+    resolveLayoutOptions,
+    resolveRouterOptions,
   });
 
   if (exportSvgButton) {

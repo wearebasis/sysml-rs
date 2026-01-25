@@ -24,8 +24,9 @@ use std::fmt;
 
 
 use crate::membership::props as membership_props;
-use crate::{ElementKind, ModelGraph};
+use crate::{Element, ElementKind, ModelGraph};
 use sysml_id::ElementId;
+use sysml_meta::Value;
 
 /// An error in the structural integrity of the model graph.
 #[derive(Debug, Clone, PartialEq)]
@@ -192,6 +193,35 @@ impl fmt::Display for StructuralError {
 
 impl std::error::Error for StructuralError {}
 
+/// Convert StructuralError to Diagnostic for unified error reporting.
+///
+/// Error codes:
+/// - E001: OrphanElement
+/// - E002: OwnershipCycle
+/// - E003: DanglingMembershipRef
+/// - E004: RelationshipSourceTypeMismatch
+/// - E005: RelationshipTargetTypeMismatch
+/// - E006: DanglingRelationshipRef
+/// - E007: DanglingOwningMembership
+/// - E008: InvalidOwningMembership
+impl From<StructuralError> for sysml_span::Diagnostic {
+    fn from(error: StructuralError) -> Self {
+        let code = match &error {
+            StructuralError::OrphanElement { .. } => "E001",
+            StructuralError::OwnershipCycle { .. } => "E002",
+            StructuralError::DanglingMembershipRef { .. } => "E003",
+            StructuralError::RelationshipSourceTypeMismatch { .. } => "E004",
+            StructuralError::RelationshipTargetTypeMismatch { .. } => "E005",
+            StructuralError::DanglingRelationshipRef { .. } => "E006",
+            StructuralError::DanglingOwningMembership { .. } => "E007",
+            StructuralError::InvalidOwningMembership { .. } => "E008",
+        };
+
+        sysml_span::Diagnostic::error(error.to_string())
+            .with_code(code.to_string())
+    }
+}
+
 /// Types that are valid as root elements (can exist without an owner).
 const VALID_ROOT_KINDS: &[ElementKind] = &[
     ElementKind::Package,
@@ -207,6 +237,21 @@ fn is_valid_root_kind(kind: &ElementKind) -> bool {
     VALID_ROOT_KINDS.contains(kind)
         || kind.is_subtype_of(ElementKind::Membership)
         || kind.is_subtype_of(ElementKind::Package)
+}
+
+/// Check if an element kind is compatible with an expected kind.
+///
+/// An element kind is compatible if it either:
+/// 1. Is exactly the expected kind, or
+/// 2. Is a subtype of the expected kind
+///
+/// # Examples
+///
+/// - PartUsage is compatible with Feature (subtype)
+/// - Feature is compatible with Feature (exact match)
+/// - Package is NOT compatible with Feature (unrelated)
+fn is_compatible_kind(actual: &ElementKind, expected: &ElementKind) -> bool {
+    actual == expected || actual.is_subtype_of(expected.clone())
 }
 
 impl ModelGraph {
@@ -465,9 +510,29 @@ impl ModelGraph {
     /// Validate relationship type constraints for Element-based relationships.
     ///
     /// This checks that Relationship elements (like FeatureTyping, Specialization)
-    /// have source/target types matching the spec constraints.
+    /// have source/target types matching the spec constraints derived from the XMI metamodel.
+    ///
+    /// ## Validation Rules
+    ///
+    /// For each relationship element:
+    /// 1. **Source validation**: The owner element's kind must be compatible with the
+    ///    expected source type (e.g., FeatureTyping requires a Feature owner)
+    /// 2. **Target validation**: The element referenced by the target property must have
+    ///    a kind compatible with the expected target type (e.g., FeatureTyping.type must
+    ///    reference a Type)
+    ///
+    /// ## Property Resolution
+    ///
+    /// Target elements are found using `ElementKind::relationship_target_property()` which
+    /// returns the property name containing the target reference (e.g., "general" for
+    /// Specialization, "type" for FeatureTyping).
+    ///
+    /// ## Note
+    ///
+    /// This validation should be called after name resolution, when target properties
+    /// contain resolved ElementIds rather than string references.
     pub fn validate_relationship_types(&self) -> Vec<StructuralError> {
-        let errors = Vec::new();
+        let mut errors = Vec::new();
 
         for (id, element) in &self.elements {
             // Only check Relationship elements
@@ -475,31 +540,121 @@ impl ModelGraph {
                 continue;
             }
 
-            // Get expected source/target types
-            let expected_source = element.kind.relationship_source_type();
-            let expected_target = element.kind.relationship_target_type();
-
-            // This is a simplification - in practice we'd need to get the actual
-            // source/target from the relationship's properties
-            // For now, just demonstrate the structure
-
-            // Get source element if available (from relatedElement[0] typically)
-            if let Some(expected) = expected_source {
-                // TODO: Extract actual source from relationship properties
-                // and validate against expected type
-                let _ = expected; // Suppress unused warning
+            // === Validate Source (owner) ===
+            if let Some(expected_source_kind) = element.kind.relationship_source_type() {
+                // The source of a relationship is typically its owner
+                if let Some(owner_id) = &element.owner {
+                    if let Some(owner) = self.elements.get(owner_id) {
+                        if !is_compatible_kind(&owner.kind, &expected_source_kind) {
+                            errors.push(StructuralError::RelationshipSourceTypeMismatch {
+                                relationship_id: id.clone(),
+                                relationship_kind: element.kind.clone(),
+                                source_id: owner_id.clone(),
+                                source_kind: owner.kind.clone(),
+                                expected_kind: expected_source_kind.clone(),
+                            });
+                        }
+                    }
+                    // Note: Missing owner is caught by orphan validation
+                }
             }
 
-            if let Some(expected) = expected_target {
-                // TODO: Extract actual target from relationship properties
-                // and validate against expected type
-                let _ = expected; // Suppress unused warning
+            // === Validate Target (from property) ===
+            if let Some(expected_target_kind) = element.kind.relationship_target_type() {
+                // Get the property name containing the target reference
+                if let Some(prop_name) = element.kind.relationship_target_property() {
+                    if element.kind.relationship_target_is_list() {
+                        // List property (e.g., Dependency.supplier)
+                        self.validate_list_target(
+                            &mut errors,
+                            id.clone(),
+                            element,
+                            prop_name,
+                            expected_target_kind,
+                        );
+                    } else {
+                        // Single target property
+                        self.validate_single_target(
+                            &mut errors,
+                            id.clone(),
+                            element,
+                            prop_name,
+                            expected_target_kind,
+                        );
+                    }
+                }
+                // Note: Relationships without target property mapping skip target validation
             }
-
-            let _ = id; // Suppress unused warning
         }
 
         errors
+    }
+
+    /// Validate a single-valued target property.
+    fn validate_single_target(
+        &self,
+        errors: &mut Vec<StructuralError>,
+        rel_id: ElementId,
+        element: &Element,
+        prop_name: &str,
+        expected_kind: ElementKind,
+    ) {
+        // Get target ElementId from the property value (if resolved)
+        let target_id: Option<&ElementId> = element
+            .props
+            .get(prop_name)
+            .and_then(|v| v.as_ref());
+
+        if let Some(tid) = target_id {
+            if let Some(target) = self.elements.get(tid) {
+                if !is_compatible_kind(&target.kind, &expected_kind) {
+                    errors.push(StructuralError::RelationshipTargetTypeMismatch {
+                        relationship_id: rel_id,
+                        relationship_kind: element.kind.clone(),
+                        target_id: tid.clone(),
+                        target_kind: target.kind.clone(),
+                        expected_kind,
+                    });
+                }
+            }
+            // Note: Missing target element is caught by dangling reference validation
+        }
+        // Note: If the value isn't a resolved reference (still a string), skip validation
+        // This handles the case where resolution hasn't completed
+    }
+
+    /// Validate a list-valued target property.
+    fn validate_list_target(
+        &self,
+        errors: &mut Vec<StructuralError>,
+        rel_id: ElementId,
+        element: &Element,
+        prop_name: &str,
+        expected_kind: ElementKind,
+    ) {
+        // Get the list property value
+        let list_value: Option<&Vec<Value>> = element
+            .props
+            .get(prop_name)
+            .and_then(|v| v.as_list());
+
+        if let Some(list) = list_value {
+            for item in list {
+                if let Some(target_id) = item.as_ref() {
+                    if let Some(target) = self.elements.get(target_id) {
+                        if !is_compatible_kind(&target.kind, &expected_kind) {
+                            errors.push(StructuralError::RelationshipTargetTypeMismatch {
+                                relationship_id: rel_id.clone(),
+                                relationship_kind: element.kind.clone(),
+                                target_id: target_id.clone(),
+                                target_kind: target.kind.clone(),
+                                expected_kind: expected_kind.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -628,5 +783,273 @@ mod tests {
         let msg = format!("{}", error);
         assert!(msg.contains("Orphan"));
         assert!(msg.contains("TestPart"));
+    }
+
+    // === Relationship Type Validation Tests (Phase 4) ===
+
+    #[test]
+    fn valid_feature_typing_passes() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Feature (owner/source)
+        let feature = Element::new_with_kind(ElementKind::Feature).with_name("myFeature");
+        let feature_id = graph.add_element(feature);
+
+        // Create a Type (target)
+        let type_elem = Element::new_with_kind(ElementKind::Type).with_name("MyType");
+        let type_id = graph.add_element(type_elem);
+
+        // Create a FeatureTyping relationship owned by the Feature
+        let typing = Element::new_with_kind(ElementKind::FeatureTyping)
+            .with_owner(feature_id)
+            .with_prop("type", Value::Ref(type_id));
+        graph.add_element(typing);
+
+        let errors = graph.validate_relationship_types();
+        assert!(errors.is_empty(), "Valid FeatureTyping should pass: {:?}", errors);
+    }
+
+    #[test]
+    fn feature_typing_source_mismatch_detected() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Package (NOT a Feature - wrong source type)
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("NotAFeature");
+        let pkg_id = graph.add_element(pkg);
+
+        // Create a Type (target)
+        let type_elem = Element::new_with_kind(ElementKind::Type).with_name("MyType");
+        let type_id = graph.add_element(type_elem);
+
+        // Create a FeatureTyping relationship owned by Package (wrong!)
+        let typing = Element::new_with_kind(ElementKind::FeatureTyping)
+            .with_owner(pkg_id.clone())
+            .with_prop("type", Value::Ref(type_id));
+        graph.add_element(typing);
+
+        let errors = graph.validate_relationship_types();
+        let source_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, StructuralError::RelationshipSourceTypeMismatch { .. }))
+            .collect();
+        assert!(!source_errors.is_empty(), "Expected source type mismatch error for FeatureTyping owned by Package");
+    }
+
+    #[test]
+    fn feature_typing_target_mismatch_detected() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Feature (valid source)
+        let feature = Element::new_with_kind(ElementKind::Feature).with_name("myFeature");
+        let feature_id = graph.add_element(feature);
+
+        // Create a Relationship (NOT a Type - wrong target type)
+        let wrong_target = Element::new_with_kind(ElementKind::Relationship).with_name("NotAType");
+        let wrong_target_id = graph.add_element(wrong_target);
+
+        // Create a FeatureTyping with wrong target type
+        let typing = Element::new_with_kind(ElementKind::FeatureTyping)
+            .with_owner(feature_id)
+            .with_prop("type", Value::Ref(wrong_target_id));
+        graph.add_element(typing);
+
+        let errors = graph.validate_relationship_types();
+        let target_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
+            .collect();
+        assert!(!target_errors.is_empty(), "Expected target type mismatch error for FeatureTyping targeting Relationship");
+    }
+
+    #[test]
+    fn valid_specialization_passes() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Type (source/specific)
+        let specific = Element::new_with_kind(ElementKind::Type).with_name("SpecificType");
+        let specific_id = graph.add_element(specific);
+
+        // Create another Type (target/general)
+        let general = Element::new_with_kind(ElementKind::Type).with_name("GeneralType");
+        let general_id = graph.add_element(general);
+
+        // Create a Specialization relationship
+        let spec = Element::new_with_kind(ElementKind::Specialization)
+            .with_owner(specific_id)
+            .with_prop("general", Value::Ref(general_id));
+        graph.add_element(spec);
+
+        let errors = graph.validate_relationship_types();
+        assert!(errors.is_empty(), "Valid Specialization should pass: {:?}", errors);
+    }
+
+    #[test]
+    fn specialization_target_mismatch_detected() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Type (valid source)
+        let specific = Element::new_with_kind(ElementKind::Type).with_name("SpecificType");
+        let specific_id = graph.add_element(specific);
+
+        // Create an Element (NOT a Type - wrong target)
+        let wrong_target = Element::new_with_kind(ElementKind::Element).with_name("NotAType");
+        let wrong_target_id = graph.add_element(wrong_target);
+
+        // Create a Specialization with wrong target type
+        let spec = Element::new_with_kind(ElementKind::Specialization)
+            .with_owner(specific_id)
+            .with_prop("general", Value::Ref(wrong_target_id));
+        graph.add_element(spec);
+
+        let errors = graph.validate_relationship_types();
+        let target_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
+            .collect();
+        assert!(!target_errors.is_empty(), "Expected target type mismatch for Specialization targeting Element");
+    }
+
+    #[test]
+    fn subtype_is_compatible_with_expected_type() {
+        let mut graph = ModelGraph::new();
+
+        // Create a PartUsage (which is a subtype of Feature)
+        let part = Element::new_with_kind(ElementKind::PartUsage).with_name("myPart");
+        let part_id = graph.add_element(part);
+
+        // Create a Classifier (which is a subtype of Type)
+        let classifier = Element::new_with_kind(ElementKind::Classifier).with_name("MyClassifier");
+        let classifier_id = graph.add_element(classifier);
+
+        // Create a FeatureTyping: source=PartUsage (subtype of Feature), target=Classifier (subtype of Type)
+        let typing = Element::new_with_kind(ElementKind::FeatureTyping)
+            .with_owner(part_id)
+            .with_prop("type", Value::Ref(classifier_id));
+        graph.add_element(typing);
+
+        let errors = graph.validate_relationship_types();
+        assert!(errors.is_empty(), "Subtypes should be compatible: {:?}", errors);
+    }
+
+    #[test]
+    fn unresolved_target_skipped() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Feature
+        let feature = Element::new_with_kind(ElementKind::Feature).with_name("myFeature");
+        let feature_id = graph.add_element(feature);
+
+        // Create a FeatureTyping with unresolved target (string, not Ref)
+        let typing = Element::new_with_kind(ElementKind::FeatureTyping)
+            .with_owner(feature_id)
+            .with_prop("type", Value::String("UnresolvedTypeName".to_string()));
+        graph.add_element(typing);
+
+        let errors = graph.validate_relationship_types();
+        // Should NOT produce an error - unresolved targets are skipped
+        let target_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
+            .collect();
+        assert!(target_errors.is_empty(), "Unresolved targets should be skipped");
+    }
+
+    #[test]
+    fn relationship_without_target_property_skipped() {
+        let mut graph = ModelGraph::new();
+
+        // Create a Package
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("Pkg");
+        let pkg_id = graph.add_element(pkg);
+
+        // Create a base Relationship (no target property mapping)
+        let rel = Element::new_with_kind(ElementKind::Relationship)
+            .with_owner(pkg_id);
+        graph.add_element(rel);
+
+        let errors = graph.validate_relationship_types();
+        // Base Relationship types without property mappings should not cause target errors
+        let target_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, StructuralError::RelationshipTargetTypeMismatch { .. }))
+            .collect();
+        assert!(target_errors.is_empty(), "Relationships without target property should be skipped");
+    }
+
+    // === Diagnostic Conversion Tests (Phase 5) ===
+
+    #[test]
+    fn structural_error_to_diagnostic() {
+        use sysml_span::Diagnostic;
+
+        let error = StructuralError::OrphanElement {
+            element_id: ElementId::new_v4(),
+            element_name: Some("TestElement".to_string()),
+            element_kind: ElementKind::PartUsage,
+        };
+
+        let diag: Diagnostic = error.into();
+        assert!(diag.is_error());
+        assert_eq!(diag.code, Some("E001".to_string()));
+        assert!(diag.message.contains("Orphan"));
+        assert!(diag.message.contains("TestElement"));
+    }
+
+    #[test]
+    fn all_structural_errors_have_codes() {
+        use sysml_span::Diagnostic;
+
+        let errors = vec![
+            StructuralError::OrphanElement {
+                element_id: ElementId::new_v4(),
+                element_name: None,
+                element_kind: ElementKind::PartUsage,
+            },
+            StructuralError::OwnershipCycle {
+                element_ids: vec![ElementId::new_v4()],
+            },
+            StructuralError::DanglingMembershipRef {
+                membership_id: ElementId::new_v4(),
+                property: "test".to_string(),
+                missing_id: ElementId::new_v4(),
+            },
+            StructuralError::RelationshipSourceTypeMismatch {
+                relationship_id: ElementId::new_v4(),
+                relationship_kind: ElementKind::FeatureTyping,
+                source_id: ElementId::new_v4(),
+                source_kind: ElementKind::Package,
+                expected_kind: ElementKind::Feature,
+            },
+            StructuralError::RelationshipTargetTypeMismatch {
+                relationship_id: ElementId::new_v4(),
+                relationship_kind: ElementKind::FeatureTyping,
+                target_id: ElementId::new_v4(),
+                target_kind: ElementKind::Package,
+                expected_kind: ElementKind::Type,
+            },
+            StructuralError::DanglingRelationshipRef {
+                relationship_id: ElementId::new_v4(),
+                endpoint: "source".to_string(),
+                missing_id: ElementId::new_v4(),
+            },
+            StructuralError::DanglingOwningMembership {
+                element_id: ElementId::new_v4(),
+                element_name: None,
+                missing_membership_id: ElementId::new_v4(),
+            },
+            StructuralError::InvalidOwningMembership {
+                element_id: ElementId::new_v4(),
+                membership_id: ElementId::new_v4(),
+                membership_kind: ElementKind::Package,
+            },
+        ];
+
+        let expected_codes = ["E001", "E002", "E003", "E004", "E005", "E006", "E007", "E008"];
+
+        for (error, expected_code) in errors.into_iter().zip(expected_codes.iter()) {
+            let diag: Diagnostic = error.into();
+            assert_eq!(diag.code, Some(expected_code.to_string()), "Wrong code for error");
+            assert!(diag.is_error());
+        }
     }
 }

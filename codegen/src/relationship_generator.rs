@@ -440,6 +440,238 @@ pub fn get_fallback_constraint_names() -> Vec<&'static str> {
     get_fallback_constraints().keys().copied().collect()
 }
 
+/// Information about a relationship's target property.
+#[derive(Debug, Clone)]
+pub struct RelationshipTargetProperty {
+    /// The property name containing the target (e.g., "general", "type").
+    pub property: String,
+    /// Whether this is a multi-valued (list) property.
+    pub is_multi: bool,
+}
+
+/// Source property names that represent the "source" side of a relationship.
+/// These are the owning features, not the targets we want to validate.
+const SOURCE_PROPERTY_PATTERNS: &[&str] = &[
+    "specific",           // Specialization - the specializing type
+    "subsettingFeature",  // Subsetting - the subsetting feature
+    "redefiningFeature",  // Redefinition - the redefining feature
+    "featureInverted",    // FeatureInverting - the inverted feature
+    "typedFeature",       // FeatureTyping - the typed feature
+    "typeDisjoined",      // Disjoining - the disjoined type
+    "subclassifier",      // Subclassification - the subclassifier
+    "featureOfType",      // TypeFeaturing - the featured type
+    "annotatingElement",  // Annotation - the annotating element (source)
+    "importOwningNamespace", // Import - the importing namespace
+    "owningRelatedElement", // Generic - owner element
+    "membershipOwningNamespace", // Membership - owning namespace
+];
+
+/// Map grammar rule names to element type names where they differ.
+///
+/// The Xtext grammar often uses fragment names or abbreviated rule names
+/// that differ from the actual element type names.
+fn normalize_rule_to_element_type(rule_name: &str) -> String {
+    // First strip "Owned" prefix if present
+    let base = rule_name.strip_prefix("Owned").unwrap_or(rule_name);
+
+    // Map grammar fragment/rule names to ElementKind names
+    match base {
+        // FeatureType fragment returns FeatureTyping
+        "FeatureType" => "FeatureTyping".to_string(),
+        // MetadataTyping returns FeatureTyping (but for metadata)
+        "MetadataTyping" => "FeatureTyping".to_string(),
+        // ConjugatedPortTyping rule -> ConjugatedPortTyping element
+        "ConjugatedPortTyping" => "ConjugatedPortTyping".to_string(),
+        // CrossSubsetting is a feature chain subsetting
+        "CrossSubsetting" => "CrossSubsetting".to_string(),
+        // Keep the base name for most rules
+        _ => base.to_string(),
+    }
+}
+
+/// Build a map from relationship type names to their target property info.
+///
+/// Uses cross-reference data from Xtext grammar to identify which property
+/// contains the target element reference.
+pub fn build_relationship_target_properties(
+    cross_refs: &[crate::xtext_crossref_parser::CrossReference],
+) -> HashMap<String, RelationshipTargetProperty> {
+    let mut result: HashMap<String, RelationshipTargetProperty> = HashMap::new();
+
+    for cr in cross_refs {
+        // Skip source-side properties (these are the owning/source features)
+        if is_source_property(&cr.property) {
+            continue;
+        }
+
+        // Normalize rule name to element type name
+        let element_type = normalize_rule_to_element_type(&cr.containing_rule);
+
+        // Only add if we don't already have an entry (first occurrence wins)
+        result.entry(element_type).or_insert_with(|| RelationshipTargetProperty {
+            property: cr.property.clone(),
+            is_multi: cr.is_multi,
+        });
+    }
+
+    result
+}
+
+/// Check if a property name represents the source side of a relationship.
+fn is_source_property(property: &str) -> bool {
+    SOURCE_PROPERTY_PATTERNS.contains(&property)
+}
+
+/// Coverage report for relationship target property mappings.
+#[derive(Debug)]
+pub struct RelationshipPropertyCoverageReport {
+    /// Total number of relationship types.
+    pub total_relationships: usize,
+    /// Number of relationships with target property mappings.
+    pub with_mapping: usize,
+    /// Relationship types without mappings.
+    pub without_mapping: Vec<String>,
+    /// Coverage percentage.
+    pub coverage_percent: f64,
+}
+
+/// Validate coverage of relationship target property mappings.
+pub fn validate_relationship_property_coverage(
+    relationship_types: &[&str],
+    property_map: &HashMap<String, RelationshipTargetProperty>,
+) -> RelationshipPropertyCoverageReport {
+    let mut without_mapping = Vec::new();
+    let mut with_mapping = 0;
+
+    for rel_type in relationship_types {
+        if property_map.contains_key(*rel_type) {
+            with_mapping += 1;
+        } else {
+            without_mapping.push(rel_type.to_string());
+        }
+    }
+
+    let total = relationship_types.len();
+    let coverage_percent = if total > 0 {
+        (with_mapping as f64 / total as f64) * 100.0
+    } else {
+        100.0
+    };
+
+    RelationshipPropertyCoverageReport {
+        total_relationships: total,
+        with_mapping,
+        without_mapping,
+        coverage_percent,
+    }
+}
+
+/// Generate relationship target property methods for ElementKind.
+///
+/// Generates:
+/// - `relationship_target_property()` - Returns the property name containing the target
+/// - `relationship_target_is_list()` - Returns whether the target property is a list
+pub fn generate_relationship_property_methods(
+    kerml_types: &[TypeInfo],
+    sysml_types: &[TypeInfo],
+    property_map: &HashMap<String, RelationshipTargetProperty>,
+) -> String {
+    let mut output = String::new();
+
+    output.push_str("\n// === Relationship Target Property Methods ===\n");
+    output.push_str("// Generated from Xtext cross-reference registry\n\n");
+
+    // Build hierarchy to identify all relationship types
+    let hierarchy = build_type_hierarchy(kerml_types, sysml_types);
+
+    // Find all relationship types (deduplicated)
+    let relationship_set: HashSet<&str> = kerml_types
+        .iter()
+        .chain(sysml_types.iter())
+        .filter(|t| {
+            t.name == "Relationship"
+                || hierarchy
+                    .get(&t.name)
+                    .map_or(false, |s| s.contains(&"Relationship".to_string()))
+        })
+        .map(|t| t.name.as_str())
+        .collect();
+
+    // Convert to sorted Vec for consistent output
+    let mut relationship_types: Vec<&str> = relationship_set.into_iter().collect();
+    relationship_types.sort();
+
+    output.push_str("impl ElementKind {\n");
+
+    // relationship_target_property()
+    output.push_str("    /// For relationship types, returns the property name containing the target element.\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// This property name can be used to look up the target ElementId in the\n");
+    output.push_str("    /// relationship element's props map after name resolution.\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// # Examples\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// ```\n");
+    output.push_str("    /// use sysml_core::ElementKind;\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// assert_eq!(ElementKind::Specialization.relationship_target_property(), Some(\"general\"));\n");
+    output.push_str("    /// assert_eq!(ElementKind::FeatureTyping.relationship_target_property(), Some(\"type\"));\n");
+    output.push_str("    /// assert_eq!(ElementKind::Element.relationship_target_property(), None);\n");
+    output.push_str("    /// ```\n");
+    output.push_str("    pub const fn relationship_target_property(&self) -> Option<&'static str> {\n");
+    output.push_str("        match self {\n");
+
+    for rel_type in &relationship_types {
+        if let Some(prop_info) = property_map.get(*rel_type) {
+            output.push_str(&format!(
+                "            ElementKind::{} => Some(\"{}\"),\n",
+                rel_type, prop_info.property
+            ));
+        }
+    }
+
+    output.push_str("            _ => None,\n");
+    output.push_str("        }\n");
+    output.push_str("    }\n\n");
+
+    // relationship_target_is_list()
+    output.push_str("    /// For relationship types, returns whether the target property is a list.\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// Most relationships have a single target, but some (like Dependency.supplier)\n");
+    output.push_str("    /// can have multiple targets.\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// # Examples\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// ```\n");
+    output.push_str("    /// use sysml_core::ElementKind;\n");
+    output.push_str("    ///\n");
+    output.push_str("    /// assert_eq!(ElementKind::Dependency.relationship_target_is_list(), true);\n");
+    output.push_str("    /// assert_eq!(ElementKind::Specialization.relationship_target_is_list(), false);\n");
+    output.push_str("    /// ```\n");
+    output.push_str("    pub const fn relationship_target_is_list(&self) -> bool {\n");
+    output.push_str("        match self {\n");
+
+    // Only output entries for list properties to keep the match arm small
+    for rel_type in &relationship_types {
+        if let Some(prop_info) = property_map.get(*rel_type) {
+            if prop_info.is_multi {
+                output.push_str(&format!(
+                    "            ElementKind::{} => true,\n",
+                    rel_type
+                ));
+            }
+        }
+    }
+
+    output.push_str("            _ => false,\n");
+    output.push_str("        }\n");
+    output.push_str("    }\n");
+
+    output.push_str("}\n");
+
+    output
+}
+
 /// Build a map from type name to all its supertypes (direct + transitive).
 fn build_type_hierarchy(
     kerml_types: &[TypeInfo],

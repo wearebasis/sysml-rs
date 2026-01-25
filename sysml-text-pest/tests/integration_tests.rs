@@ -2181,3 +2181,309 @@ standard library package TestModifiers {
     // Should have parsed the package and features
     assert!(result.graph.element_count() >= 7, "Expected at least 7 elements (1 package + 6 features)");
 }
+
+#[test]
+fn parse_constructor_expression() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestConstructorExpression {
+    attribute def Mass;
+    attribute m : Mass = new Mass();
+    attribute n = new OtherType(arg1, arg2);
+}
+"#;
+    let files = vec![SysmlFile::new("constructor.sysml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "Constructor expression parsing should succeed");
+}
+
+// =============================================================================
+// KERML CONNECTOR TESTS
+// =============================================================================
+
+#[test]
+fn parse_kerml_connector_basic() {
+    let parser = PestParser::new();
+    let source = r#"
+standard library package TestConnector {
+    class Occurrence {
+        feature self: Occurrence[1];
+        feature this: Occurrence[1];
+        connector :HappensDuring from [1] self to [1] this;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML connector :Type from ... to ... should parse");
+}
+
+#[test]
+fn parse_kerml_connector_named() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestConnector {
+    class Occurrence {
+        feature self: Occurrence[1];
+        feature occ: Occurrence[1];
+        connector during : HappensDuring from self to occ;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML connector name : Type from ... to ... should parse");
+}
+
+#[test]
+fn parse_kerml_connector_all_from() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestConnector {
+    class Occurrence {
+        feature a: Occurrence;
+        feature b: Occurrence;
+        connector all from a to b;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML connector all from ... to ... should parse");
+}
+
+#[test]
+fn parse_kerml_connector_plain() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestConnector {
+    class Type {
+        connector c : SomeType;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML connector plain declaration should parse");
+}
+
+#[test]
+fn parse_kerml_binding_connector() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestBinding {
+    class Type {
+        binding of a = b;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML binding of ... = ... should parse");
+}
+
+#[test]
+fn parse_kerml_succession() {
+    let parser = PestParser::new();
+    let source = r#"
+package TestSuccession {
+    class Type {
+        succession first a then b;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "KerML succession first ... then ... should parse");
+}
+
+#[test]
+fn parse_occurrences_kerml_connector_pattern() {
+    // Exact pattern from Occurrences.kerml line 50
+    let parser = PestParser::new();
+    let source = r#"
+standard library package Occurrences {
+    abstract class Occurrence {
+        feature self: Occurrence[1];
+        feature this : Occurrence[1] default self;
+        connector :HappensDuring from [1] self to [1] this;
+    }
+}
+"#;
+    let files = vec![SysmlFile::new("Occurrences.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "Occurrences.kerml connector pattern should parse");
+}
+
+#[test]
+fn test_real_occurrences_kerml() {
+    let parser = PestParser::new();
+    let path = "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Kernel Libraries/Kernel Semantic Library/Occurrences.kerml";
+    
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Skipping test: could not read file: {}", e);
+            return;
+        }
+    };
+
+    let files = vec![SysmlFile::new("Occurrences.kerml", &source)];
+    let result = parser.parse(&files);
+
+    println!("===== Occurrences.kerml Parsing Result =====");
+    println!("Has errors: {}", result.has_errors());
+    println!("Error count: {}", result.error_count());
+    println!("Element count: {}", result.graph.element_count());
+    
+    if result.has_errors() {
+        println!("\nFirst 10 errors:");
+        for (i, d) in result.diagnostics.iter().take(10).enumerate() {
+            println!("[{}] {}", i+1, d);
+        }
+    }
+    
+    // Allow some errors (library may use features not yet fully supported)
+    // but the connector syntax should parse
+    assert!(result.error_count() < 20, "Occurrences.kerml should parse with <20 errors, got {}", result.error_count());
+}
+
+#[test]
+fn test_end_feature_with_redefines() {
+    let parser = PestParser::new();
+    // Test the specific pattern failing at line 717 of Occurrences.kerml
+    let source = r#"
+struct SelfSameLifeLink {
+    end myselfSameLives [1..*] feature myselfSameLife: Anything redefines source;
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "end feature with redefines should parse");
+}
+
+#[test]
+fn test_feature_redefines_only() {
+    let parser = PestParser::new();
+    // Test just the redefines part without end
+    let source = r#"
+struct Test {
+    feature myselfSameLife: Anything redefines source;
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "feature with redefines should parse");
+}
+
+#[test]
+fn test_end_without_nested_feature() {
+    let parser = PestParser::new();
+    // Test end with simple declaration (no nested feature keyword)
+    let source = r#"
+struct Test {
+    end myselfSameLives [1..*] : Anything redefines source;
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "end without nested feature should parse");
+}
+
+#[test]
+fn test_end_with_nested_feature_simple() {
+    let parser = PestParser::new();
+    // Test end with nested feature but simple typing (no redefines)
+    let source = r#"
+struct Test {
+    end myselfSameLives [1..*] feature myselfSameLife: Anything;
+}
+"#;
+    let files = vec![SysmlFile::new("test.kerml", source)];
+    let result = parser.parse(&files);
+
+    if result.has_errors() {
+        for d in &result.diagnostics {
+            eprintln!("Error: {}", d);
+        }
+    }
+
+    assert!(result.is_ok(), "end with simple nested feature should parse");
+}

@@ -18,3 +18,11 @@ pretty_assertions = "1.4"
 
 [features]
 default = []
+
+[[example]]
+name = "categorize_failures"
+path = "examples/categorize_failures.rs"
+
+[[example]]
+name = "resolution_debug"
+path = "examples/resolution_debug.rs"

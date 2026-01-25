@@ -30,7 +30,7 @@ mod extraction;
 use pest::iterators::{Pair, Pairs};
 use sysml_core::{Element, ElementKind, ModelGraph, Value, VisibilityKind};
 use sysml_id::ElementId;
-use sysml_span::Span;
+use sysml_span::{LineIndex, Span};
 
 use crate::{ParseError, Rule};
 
@@ -59,16 +59,24 @@ pub struct Converter<'a> {
     owner_stack: Vec<ElementId>,
     /// Stack of visibility kinds for nested members.
     visibility_stack: Vec<VisibilityKind>,
+    /// Pre-computed line index for O(log n) line/column lookups.
+    /// Without this, pest's line_col() is O(n) per call, causing O(n²) parsing.
+    line_index: Option<LineIndex>,
 }
 
 impl<'a> Converter<'a> {
     /// Create a new converter.
-    pub fn new(file_path: &'a str, include_spans: bool) -> Self {
+    ///
+    /// If `source` is provided and `include_spans` is true, a line index will be
+    /// pre-computed for O(log n) line/column lookups instead of pest's O(n) default.
+    /// This reduces overall parsing from O(n²) to O(n log n).
+    pub fn new(file_path: &'a str, include_spans: bool, source: Option<&str>) -> Self {
         Converter {
             file_path,
             include_spans,
             owner_stack: Vec::new(),
             visibility_stack: Vec::new(),
+            line_index: source.filter(|_| include_spans).map(LineIndex::new),
         }
     }
 
@@ -237,6 +245,38 @@ impl<'a> Converter<'a> {
             Rule::BooleanExpressionUsage => { self.process_usage(pair, graph, ElementKind::BooleanExpression, span, work_stack)?; }
             Rule::InvariantUsage => { self.process_usage(pair, graph, ElementKind::Invariant, span, work_stack)?; }
 
+            // KerML connector types (for standard library parsing)
+            Rule::Connector => { self.process_usage(pair, graph, ElementKind::Connector, span, work_stack)?; }
+            Rule::BindingConnector => { self.process_usage(pair, graph, ElementKind::BindingConnector, span, work_stack)?; }
+            Rule::Succession => { self.process_usage(pair, graph, ElementKind::Succession, span, work_stack)?; }
+
+            // Message usage (maps to FlowUsage as messages are a type of flow)
+            Rule::MessageUsage => { self.process_usage(pair, graph, ElementKind::FlowUsage, span, work_stack)?; }
+
+            // State body actions (entry/do/exit)
+            Rule::StateActionUsage => { self.process_usage(pair, graph, ElementKind::ActionUsage, span, work_stack)?; }
+
+            // Succession targets in actions
+            Rule::SuccessionStateUsage => { self.process_usage(pair, graph, ElementKind::StateUsage, span, work_stack)?; }
+            Rule::SuccessionPortionUsage => { self.process_usage(pair, graph, ElementKind::OccurrenceUsage, span, work_stack)?; }
+
+            // Effect behaviors in transitions
+            Rule::EffectBehaviorUsage => {
+                self.push_children(pair, work_stack);
+            }
+            Rule::EffectPerformedActionUsage => { self.process_usage(pair, graph, ElementKind::PerformActionUsage, span, work_stack)?; }
+
+            // Requirement body members
+            Rule::ActorUsage => { self.process_usage(pair, graph, ElementKind::PartUsage, span, work_stack)?; }
+            Rule::StakeholderUsage => { self.process_usage(pair, graph, ElementKind::PartUsage, span, work_stack)?; }
+            Rule::SubjectUsage => { self.process_usage(pair, graph, ElementKind::ReferenceUsage, span, work_stack)?; }
+            Rule::RequirementConstraintUsage => { self.process_usage(pair, graph, ElementKind::ConstraintUsage, span, work_stack)?; }
+            Rule::ObjectiveRequirementUsage => { self.process_usage(pair, graph, ElementKind::RequirementUsage, span, work_stack)?; }
+            Rule::FramedConcernUsage => { self.process_usage(pair, graph, ElementKind::ConcernUsage, span, work_stack)?; }
+
+            // View body members
+            Rule::ViewRenderingUsage => { self.process_usage(pair, graph, ElementKind::RenderingUsage, span, work_stack)?; }
+
             // Usages - *Element rules pass through, *Member rules extract visibility
             Rule::UsageElement | Rule::NonOccurrenceUsageElement | Rule::OccurrenceUsageElement
             | Rule::StructureUsageElement | Rule::BehaviorUsageElement | Rule::VariantUsageElement => {
@@ -298,11 +338,22 @@ impl<'a> Converter<'a> {
 
             // Transitions
             Rule::TransitionUsage => { self.process_usage(pair, graph, ElementKind::TransitionUsage, span, work_stack)?; }
+            // Target transitions in state bodies
+            Rule::TargetTransitionUsage => { self.process_usage(pair, graph, ElementKind::TransitionUsage, span, work_stack)?; }
 
             // ActionNode/ControlNode wrappers - push children
-            Rule::ActionNode | Rule::ControlNode => {
+            Rule::ActionNode => {
                 self.push_children(pair, work_stack);
             }
+
+            // Control nodes - create specific elements
+            Rule::ControlNode => {
+                self.push_children(pair, work_stack);
+            }
+            Rule::MergeNode => { self.process_usage(pair, graph, ElementKind::MergeNode, span, work_stack)?; }
+            Rule::DecisionNode => { self.process_usage(pair, graph, ElementKind::DecisionNode, span, work_stack)?; }
+            Rule::JoinNode => { self.process_usage(pair, graph, ElementKind::JoinNode, span, work_stack)?; }
+            Rule::ForkNode => { self.process_usage(pair, graph, ElementKind::ForkNode, span, work_stack)?; }
 
             // Imports
             Rule::Import => { self.process_import(pair, graph, span)?; }
@@ -330,14 +381,176 @@ impl<'a> Converter<'a> {
                 self.push_children(pair, work_stack);
             }
 
+            // Requirement body members - extract visibility and push children
+            Rule::ActorMember | Rule::StakeholderMember | Rule::SubjectMember | Rule::ObjectiveMember
+            | Rule::RequirementConstraintMember | Rule::FramedConcernMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+
+            // View body members - extract visibility and push children
+            Rule::ViewRenderingMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+
+            // State body members - extract visibility and push children
+            Rule::TransitionUsageMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+            Rule::EntryActionMember | Rule::DoActionMember | Rule::ExitActionMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+
+            // Target succession/transition members
+            Rule::TargetSuccessionMember | Rule::TargetTransitionMember | Rule::EntryTransitionMember => {
+                let visibility = self.extract_visibility(&pair);
+                self.visibility_stack.push(visibility);
+                work_stack.push(WorkItem::PopVisibility);
+                self.push_children(pair, work_stack);
+            }
+
             // Skip intermediate rules - push their children
             Rule::DefinitionBody | Rule::DefinitionBodyItem | Rule::PackageBody
             | Rule::ActionBody | Rule::ActionBodyItem | Rule::StateBody | Rule::StateBodyItem
             | Rule::CalculationBody | Rule::CalculationBodyItem | Rule::FunctionBody | Rule::FunctionBodyItem | Rule::RequirementBody | Rule::RequirementBodyItem
             | Rule::CaseBody | Rule::CaseBodyItem | Rule::ViewBody | Rule::ViewBodyItem
             | Rule::InterfaceBody | Rule::InterfaceBodyItem | Rule::EnumerationBody | Rule::EnumerationBodyItem
-            | Rule::MetadataBody | Rule::MetadataBodyItem => {
+            | Rule::MetadataBody | Rule::MetadataBodyItem
+            // Action body behavior members and succession targets
+            | Rule::ActionBodyBehaviorMember | Rule::InitialNodeMember | Rule::ControlNodeMember | Rule::ActionNodeMember
+            | Rule::TargetSuccession | Rule::GuardedTargetSuccession | Rule::DefaultTargetSuccession
+            | Rule::ActionTargetSuccession | Rule::SuccessionTarget
+            | Rule::SuccessionWhileLoopNode | Rule::SuccessionForLoopNode | Rule::SuccessionIfNode
+            | Rule::SuccessionActionNodeDeclaration | Rule::SuccessionActionUsageDeclaration
+            // State body behavior items
+            | Rule::StateBodyBehaviorItem
+            // Occurrence usage with optional succession prefix
+            | Rule::OccurrenceUsageMemberWithSuccession
+            // Connector/succession intermediate rules
+            | Rule::TransitionSuccession | Rule::TransitionSuccessionMember
+            | Rule::ConnectorEndMember | Rule::ConnectorEnd
+            | Rule::ConnectorPart | Rule::BinaryConnectorPart | Rule::NaryConnectorPart
+            | Rule::InterfacePart | Rule::BinaryInterfacePart | Rule::NaryInterfacePart
+            | Rule::InterfaceEndMember | Rule::InterfaceEnd
+            // Reference subsetting (contains QualifiedName or FeatureChain)
+            | Rule::OwnedReferenceSubsetting
+            // Enumeration members
+            | Rule::EnumerationUsageMember | Rule::EnumeratedValue
+            // Declaration and completion rules (extract names in parent)
+            | Rule::UsageDeclaration | Rule::FeatureDeclaration
+            | Rule::UsageCompletion | Rule::UsageBody
+            // Action body parameters
+            | Rule::ActionBodyParameter | Rule::ActionBodyParameterMember
+            | Rule::ActionNodeUsageDeclaration
+            // Alias members
+            | Rule::AliasMember
+            // Arguments for invocations/expressions
+            | Rule::Argument | Rule::ArgumentList | Rule::ArgumentMember | Rule::ArgumentValue
+            | Rule::PositionalArgumentList
+            // Assignment nodes
+            | Rule::AssignmentNodeDeclaration
+            // Feature-related intermediate rules
+            | Rule::FeatureBinding | Rule::FeatureChainMember | Rule::FeatureReferenceMember
+            | Rule::FeatureType | Rule::FeatureValue
+            | Rule::OwnedFeatureTyping | Rule::OwnedRedefinition | Rule::ReferenceTyping
+            // Metadata-related rules
+            | Rule::MetadataBodyUsage | Rule::MetadataBodyUsageMember
+            | Rule::MetadataTyping | Rule::MetadataUsageDeclaration
+            // Node parameters
+            | Rule::NodeParameter | Rule::NodeParameterMember
+            // Relationship body
+            | Rule::RelationshipBody | Rule::RelationshipBodyElement
+            // Requirement constraint kind (enum value, not element)
+            | Rule::RequirementConstraintKind
+            // Return parameter member
+            | Rule::ReturnParameterMember
+            // Value part
+            | Rule::ValuePart
+            // Visibility (enum value, not element)
+            | Rule::Visibility | Rule::VisibilityKind => {
                 self.push_children(pair, work_stack);
+            }
+
+            // Type result/reference features (for type expressions)
+            | Rule::TypeResultMember | Rule::TypeReferenceFeature
+            // Subclassification/specialization markers
+            | Rule::SubclassificationRelationship | Rule::SpecializesToken => {
+                self.push_children(pair, work_stack);
+            }
+
+            // Literal expressions - create proper literal elements
+            Rule::LiteralExpression => {
+                // Push children to handle specific literal types
+                self.push_children(pair, work_stack);
+            }
+
+            Rule::LiteralBoolean => {
+                let text = pair.as_str().trim();
+                let value = text == "true";
+                let mut element = Element::new_with_kind(ElementKind::LiteralBoolean);
+                element.set_prop("value", Value::Bool(value));
+                if let Some(s) = span {
+                    element.spans.push(s);
+                }
+                self.add_with_ownership(element, graph);
+            }
+
+            Rule::LiteralString => {
+                let text = pair.as_str();
+                // Strip surrounding quotes
+                let value = if text.len() >= 2 && text.starts_with('"') && text.ends_with('"') {
+                    text[1..text.len()-1].to_string()
+                } else {
+                    text.to_string()
+                };
+                let mut element = Element::new_with_kind(ElementKind::LiteralString);
+                element.set_prop("value", Value::String(value));
+                if let Some(s) = span {
+                    element.spans.push(s);
+                }
+                self.add_with_ownership(element, graph);
+            }
+
+            Rule::LiteralNumber => {
+                let text = pair.as_str().trim();
+                // Determine if integer or rational (contains decimal point or exponent)
+                let (kind, value) = if text.contains('.') || text.contains('e') || text.contains('E') {
+                    let f: f64 = text.parse().unwrap_or(0.0);
+                    (ElementKind::LiteralRational, Value::Float(f))
+                } else {
+                    let i: i64 = text.parse().unwrap_or(0);
+                    (ElementKind::LiteralInteger, Value::Int(i))
+                };
+                let mut element = Element::new_with_kind(kind);
+                element.set_prop("value", value);
+                if let Some(s) = span {
+                    element.spans.push(s);
+                }
+                self.add_with_ownership(element, graph);
+            }
+
+            Rule::LiteralInfinity => {
+                let mut element = Element::new_with_kind(ElementKind::LiteralInfinity);
+                if let Some(s) = span {
+                    element.spans.push(s);
+                }
+                self.add_with_ownership(element, graph);
+            }
+
+            // Literals and primitive values - no children to process
+            Rule::NUMBER | Rule::STRING_VALUE => {
+                // These are handled by LiteralNumber and LiteralString
             }
 
             // Names and identifiers - no action needed
@@ -349,8 +562,27 @@ impl<'a> Converter<'a> {
             // Tokens and keywords - skip
             _ if rule_is_keyword(rule) => {}
 
-            // Default: push children
+            // Default: push children and log unhandled rules in debug builds
             _ => {
+                // Track unhandled rules for debugging grammar coverage
+                #[cfg(debug_assertions)]
+                {
+                    // Only log rules that might represent elements we should be creating
+                    let rule_name = format!("{:?}", rule);
+                    // Skip noise: keywords, operators, whitespace, expressions
+                    if !rule_name.starts_with("KW_")
+                        && !rule_name.starts_with("OP_")
+                        && !rule_name.starts_with("Typed")
+                        && !rule_name.contains("Prefix")
+                        && !rule_name.contains("Suffix")
+                        && !rule_name.contains("Expression")
+                        && !rule_name.contains("Operator")
+                        && !rule_name.contains("Literal")
+                        && !matches!(rule, Rule::WHITESPACE | Rule::NEWLINE | Rule::COMMENT | Rule::EOI)
+                    {
+                        eprintln!("[AST] Unhandled rule: {:?}", rule);
+                    }
+                }
                 self.push_children(pair, work_stack);
             }
         }
@@ -508,7 +740,11 @@ impl<'a> Converter<'a> {
         }
 
         if let Some(value_expression) = extraction.value_expression {
-            element.set_prop("unresolved_value", Value::String(value_expression));
+            // Only store as unresolved_value if it's NOT a literal
+            // Literals are handled by the LiteralExpression handlers and create proper elements
+            if !extraction.value_is_literal {
+                element.set_prop("unresolved_value", Value::String(value_expression));
+            }
             if extraction.value_is_default {
                 element.set_prop("isDefault", true);
             }
@@ -805,20 +1041,30 @@ impl<'a> Converter<'a> {
     }
 
     /// Convert a pest Pair to a Span.
+    ///
+    /// Uses the pre-computed line index for O(log n) lookups when available.
+    /// Falls back to pest's O(n) line_col() if no line index was built.
     fn pair_to_span(&self, pair: &Pair<'_, Rule>) -> Option<Span> {
         if !self.include_spans {
             return None;
         }
 
         let pest_span = pair.as_span();
-        let (line, col) = pest_span.start_pos().line_col();
+        let (line, col) = if let Some(ref index) = self.line_index {
+            // O(log n) lookup using pre-computed line index
+            index.line_col(pest_span.start())
+        } else {
+            // O(n) fallback - scans from byte 0 to position
+            let (l, c) = pest_span.start_pos().line_col();
+            (l as u32, c as u32)
+        };
 
         Some(Span::with_location(
             self.file_path,
             pest_span.start(),
             pest_span.end(),
-            line as u32,
-            col as u32,
+            line,
+            col,
         ))
     }
 

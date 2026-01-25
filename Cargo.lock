@@ -2020,6 +2020,7 @@ name = "sysml-codegen"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "regex",
  "serde",
  "serde_json",
 ]
@@ -2036,6 +2037,8 @@ dependencies = [
  "sysml-id",
  "sysml-meta",
  "sysml-span",
+ "sysml-text",
+ "sysml-text-pest",
 ]
 
 [[package]]

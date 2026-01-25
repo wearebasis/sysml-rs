@@ -22,12 +22,16 @@ This file tracks parsing and resolution coverage metrics over time. Update after
 
 | Test | Resolved | Unresolved | Rate | Notes |
 |------|----------|------------|------|-------|
-| Single-file (no library) | 919 | 1,221 | 42.9% | Baseline, no cross-file refs |
-| Multi-file (with library) | 866 | 77 | **91.8%** | Best result - all files in one graph |
+| Single-file (no library) | 919 | 1,227 | 42.8% | Baseline, no cross-file refs |
+| Multi-file (with library) | 893 | 56 | **94.1%** | Best result - all files in one graph |
 | With library (per-file) | 595 | 348 | **63.1%** | Per-file mode (cross-file refs can't resolve) |
 | Quick check | 40 | 7 | **85.1%** | Single file with library |
 
-**Phase 2e.1 Bug FIXED:** Library index rebuild bug resolved. Resolution rates improved significantly.
+**Phase 2e.4 Literal Fix COMPLETE:** Numeric literals like `5.0` no longer create false unresolved references.
+
+**Phase 2e.3 Iterative Resolution:** Fixed-point iteration for cross-file inheritance chains.
+
+**eVehicleLibrary Stub Created:** Added stub library for missing HVAC model dependency.
 
 ### Unhandled AST Rules
 
@@ -123,6 +127,51 @@ Feature redefinitions like `redefines pilotPod` require traversing the supertype
 
 ## History
 
+### 2026-01-25 - Phase 2e.4 Complete (Literal Detection Fix)
+
+**Changes:**
+- Added `is_literal_expression()` detection in `extraction.rs` to identify simple literal values
+- Modified `process_usage()` to skip setting `unresolved_value` for literal values
+- Added literal handlers in `ast/mod.rs` for future literal element creation
+- Created `eVehicleLibrary.sysml` stub for missing HVAC model dependency
+
+**Problem Solved:**
+Numeric literals like `5.0`, `100`, `true` were being stored in `unresolved_value` property, causing false "unresolved reference '5.0'" errors during resolution.
+
+**Solution:**
+Detect when a value expression is a simple literal (not a complex expression like `2 + 3`) and skip storing it as an unresolved reference.
+
+**Metrics:**
+- Multi-file resolution: 92.0% → **94.1%** (+2.1%)
+- Total unresolved references: 75 → 56 (-19)
+
+### 2026-01-25 - Phase 2e.3 Complete (Iterative Resolution)
+
+**Changes:**
+- Implemented fixed-point iterative resolution in `resolve_references_excluding()`
+- Extracted single-pass logic to `resolve_references_single_pass()` helper
+- Simplified `resolve_references()` to delegate to `resolve_references_excluding()`
+- Resolution now runs multiple passes until no more references resolve
+
+**How It Works:**
+- Each iteration rebuilds scope tables with newly resolved Specializations
+- This makes inherited members visible for subsequent redefinition resolution
+- Typical completion: 2 iterations (iteration 2 resolves 0 → fixed-point reached)
+- Safety limit: 10 iterations maximum
+
+**Metrics:**
+- Multi-file resolution: 91.8% → **92.0%** (+0.2%)
+- Iteration count: 2 passes
+- All existing unit tests pass
+
+**Analysis:**
+The remaining 75 unresolved references are NOT cross-file redefinition issues:
+- Feature chain expressions (e.g., `evaluateData.verdict`)
+- References to custom types not in library (`Temperature`, `Percentage`)
+- Numeric literals being parsed as references
+
+These require different fixes (expression parsing, custom library support).
+
 ### 2026-01-25 - Phase 2e.2 Complete (Analysis of Remaining Unresolved References)
 
 **Findings:**
@@ -199,9 +248,14 @@ cargo test -p sysml-spec-tests corpus_resolution_quick -- --ignored --nocapture
 | Metric | Current | Target | Priority | Status |
 |--------|---------|--------|----------|--------|
 | Parsing | 96.5% | 100% | Medium | 2 files remaining |
-| Resolution (multi-file) | **91.8%** | 90%+ | HIGH | ✅ ACHIEVED |
+| Resolution (multi-file) | **94.1%** | 90%+ | HIGH | ✅ ACHIEVED |
 | Resolution (with library) | **63.1%** | 70%+ | Medium | Near target |
 | Resolution (quick) | **85.1%** | 80%+ | - | ✅ ACHIEVED |
 | Grammar-Element linkage | 67% | 90% | Low | Future work |
 
-**Note:** Per-file resolution (63.1%) is inherently lower than multi-file (91.8%) because cross-file references cannot resolve when files are parsed independently.
+**Note:** Per-file resolution (63.1%) is inherently lower than multi-file (94.1%) because cross-file references cannot resolve when files are parsed independently.
+
+**Note:** The 94.1% rate represents near-maximum coverage for this corpus. Remaining 56 unresolved references are:
+- Feature chain expressions (e.g., `evaluateData.verdict`)
+- Cross-file redefinitions (e.g., `pilotPod`)
+- These require deeper expression parsing or cross-file traversal.

@@ -354,6 +354,83 @@ fn main() {
     }
 
     // =====================================================================
+    // RESOLUTION SPEC COMPLETENESS VALIDATION
+    // =====================================================================
+    // Validate that every unresolved_* property in the resolution module
+    // has a corresponding entry in the cross-reference registry.
+    //
+    // This ensures spec completeness: all resolvable properties have
+    // explicit scoping strategies defined.
+    // =====================================================================
+
+    // Read the resolution module source
+    let resolution_mod_path = Path::new(&manifest_dir).join("src/resolution/mod.rs");
+    println!("cargo:rerun-if-changed={}", resolution_mod_path.display());
+
+    if resolution_mod_path.exists() {
+        let resolution_mod_content = fs::read_to_string(&resolution_mod_path)
+            .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", resolution_mod_path, e));
+
+        // Extract unresolved_* properties from resolution module
+        let resolution_props =
+            sysml_codegen::extract_resolution_unresolved_props(&resolution_mod_content);
+
+        println!(
+            "cargo:warning=Resolution module defines {} unresolved_* properties",
+            resolution_props.len()
+        );
+
+        // Get registry property names
+        let registry_props: Vec<String> = all_cross_refs
+            .iter()
+            .map(|cr| cr.property.clone())
+            .collect();
+
+        // Validate with mappings (sources->source, targets->target) and exclusions (value)
+        let spec_result =
+            sysml_codegen::validate_resolution_spec_with_mappings(&resolution_props, &registry_props);
+
+        println!(
+            "cargo:warning=Resolution Spec Completeness: {}/{} properties validated ({:.1}%)",
+            spec_result.validated.len(),
+            spec_result.resolution_total,
+            spec_result.coverage_percent()
+        );
+
+        println!(
+            "cargo:warning=  Phase A (parser-created): {}",
+            spec_result.phase_a_props.len()
+        );
+        println!(
+            "cargo:warning=  Phase B (resolution-only): {}",
+            spec_result.phase_b_props.len()
+        );
+
+        if !spec_result.missing_from_registry.is_empty() {
+            println!(
+                "cargo:warning=Resolution properties missing from registry: {:?}",
+                spec_result.missing_from_registry
+            );
+        }
+
+        // Fail build if strict validation is enabled and there are missing entries
+        if env::var("SYSML_STRICT_VALIDATION").is_ok() && !spec_result.is_valid() {
+            panic!(
+                "RESOLUTION SPEC COMPLETENESS FAILED!\n\
+                 {} properties missing from registry: {:?}\n\
+                 Add corresponding entries to the cross-reference registry.",
+                spec_result.missing_from_registry.len(),
+                spec_result.missing_from_registry
+            );
+        }
+    } else {
+        println!(
+            "cargo:warning=Resolution module not found at {:?}, skipping spec validation",
+            resolution_mod_path
+        );
+    }
+
+    // =====================================================================
     // CODE GENERATION
     // =====================================================================
 
@@ -412,10 +489,47 @@ fn main() {
         &xmi_constraints,
     );
 
+    // =====================================================================
+    // RELATIONSHIP TARGET PROPERTY GENERATION (Phase 4)
+    // =====================================================================
+    // Generate methods to look up which property contains the target element
+    // for each relationship type. This enables validate_relationship_types().
+    // =====================================================================
+
+    // Build map from relationship types to their target property info
+    let property_map = sysml_codegen::build_relationship_target_properties(&all_cross_refs);
+
+    // Validate coverage
+    let property_coverage = sysml_codegen::validate_relationship_property_coverage(
+        &relationship_type_names,
+        &property_map,
+    );
+
+    println!(
+        "cargo:warning=Relationship property mappings: {}/{} ({:.1}%)",
+        property_coverage.with_mapping,
+        property_coverage.total_relationships,
+        property_coverage.coverage_percent
+    );
+
+    if !property_coverage.without_mapping.is_empty() {
+        println!(
+            "cargo:warning=Relationships without target property mapping: {:?}",
+            property_coverage.without_mapping
+        );
+    }
+
+    // Generate property lookup methods
+    let relationship_property_code = sysml_codegen::generate_relationship_property_methods(
+        &kerml_types,
+        &sysml_types,
+        &property_map,
+    );
+
     // Combine all ElementKind-related code
     let element_kind_code = format!(
-        "{}\n{}\n{}",
-        enum_code, hierarchy_code, relationship_code
+        "{}\n{}\n{}\n{}",
+        enum_code, hierarchy_code, relationship_code, relationship_property_code
     );
 
     // Collect valid element kinds for filtering
@@ -517,6 +631,48 @@ fn main() {
     // Generate validation methods
     let validation_code =
         sysml_codegen::validation_generator::generate_validation_methods(&filtered_resolved);
+
+    // =====================================================================
+    // PROPERTY VALIDATION COVERAGE
+    // =====================================================================
+    // Analyze property constraints from shapes and report which validation
+    // constraint types are covered by the generated validation code.
+    // This provides visibility into validation gaps at build time.
+    // =====================================================================
+
+    let coverage_result =
+        sysml_codegen::validate_property_validation_coverage(&filtered_resolved);
+
+    println!(
+        "cargo:warning=Property validation coverage: {}/{} constraint types ({:.1}%)",
+        coverage_result.implemented_constraints.len(),
+        coverage_result.implemented_constraints.len() + coverage_result.missing_constraints.len(),
+        coverage_result.coverage_percent()
+    );
+
+    // Report per-constraint-type statistics
+    for constraint_type in sysml_codegen::ConstraintType::all() {
+        if let Some(stats) = coverage_result.constraint_stats.get(constraint_type) {
+            if stats.applicable_count > 0 {
+                let status = if stats.is_implemented {
+                    "COVERED"
+                } else {
+                    "MISSING"
+                };
+                println!(
+                    "cargo:warning=  {:?}: {} properties, {}",
+                    constraint_type, stats.applicable_count, status
+                );
+            }
+        }
+    }
+
+    if !coverage_result.missing_constraints.is_empty() {
+        println!(
+            "cargo:warning=Unimplemented validation constraints: {:?}",
+            coverage_result.missing_constraints
+        );
+    }
 
     // Combine into properties.generated.rs
     let mut properties_code = String::new();
