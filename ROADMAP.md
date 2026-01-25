@@ -1176,7 +1176,7 @@ See `COVERAGE_STATUS.md` for detailed tracking.
 
 ---
 
-### Phase 2e: Resolution Quality Improvements ✅ COMPLETE
+### Phase 2e: Resolution Quality Improvements 🔄 IN PROGRESS (91.8% achieved, targeting 95%+)
 
 **Goal**: Achieve 90%+ resolution rate with standard library loaded.
 
@@ -1231,16 +1231,35 @@ These model files import from `eVehicleLibrary::*` which doesn't exist in the co
 
 **Conclusion**: 91.8% resolution represents the practical maximum for this corpus. No code changes needed.
 
-#### 2e.3: Cross-File Reference Resolution (Future Work)
+#### 2e.3: Cross-File Redefinition Resolution 🔄 IN PROGRESS
 
-**Issue**: References like `pilotPod`, `station` fail because they're redefined from features in sibling files.
+**Goal**: Resolve the remaining 58 cross-file redefinition references (~6% of total).
 
-**Status**: Deferred to future work. Would require:
-- [ ] Option A: Supertype namespace traversal across file boundaries
-- [ ] Option B: Project-level redefinition index
-- [ ] Option C: Two-pass resolution for cross-file redefinitions
+**Root Cause Analysis**:
+The `expand_inherited()` function in `sysml-core/src/resolution/mod.rs` (lines 1001-1083) fails to find supertypes in some cross-file scenarios. When supertype lookup fails, inherited members aren't added to the scope table, causing `redefines` resolution to fail.
 
-**Expected Impact**: +3-5% resolution improvement (not critical for Phase 2)
+**Stages**:
+
+##### 2e.3.1: Diagnose Exact Failure Patterns
+- [ ] Add resolution tracing to `expand_inherited()`
+- [ ] Run corpus test to identify exactly where supertype lookup fails
+- [ ] Document the qualified name patterns that aren't resolving
+- [ ] Identify if it's a timing issue (Specialization not yet resolved) or lookup issue
+
+##### 2e.3.2: Fix Supertype Resolution in expand_inherited
+- [ ] Improve qualified name handling in supertype lookup
+- [ ] Ensure `resolve_import_target()` handles all edge cases
+- [ ] Add fallback to `resolve_qualified_name_global()` if needed
+- [ ] Test with corpus to verify improvements
+
+##### 2e.3.3: Verify and Update Coverage Stats
+- [ ] Run full corpus resolution test
+- [ ] Update COVERAGE_STATUS.md with new metrics
+- [ ] Document any remaining unresolved references
+- [ ] Verify no regressions in existing resolution
+
+**Expected Impact**: +3-5% resolution improvement (91.8% → 95%+)
+**Estimated Effort**: 4-8 hours (1-2 sessions)
 
 #### Success Criteria
 
@@ -1248,6 +1267,7 @@ These model files import from `eVehicleLibrary::*` which doesn't exist in the co
 - [x] Multi-file resolution rate reaches 85%+ (achieved 91.8%)
 - [x] KerML base types resolve correctly (confirmed working after 2e.1 fix)
 - [x] Remaining unresolved refs documented as known limitations (cross-file redefs, missing imports)
+- [ ] Cross-file redefinitions resolve correctly (2e.3 - target 95%+)
 
 ---
 
@@ -1259,7 +1279,7 @@ These model files import from `eVehicleLibrary::*` which doesn't exist in the co
 | **2b** | Semantic model with relationships, ownership, properties | ✅ Complete |
 | **2c** | Corpus coverage, ElementKind coverage | ✅ MVP |
 | **2d** | Resolve `unresolved_*` refs to concrete ElementIds | ✅ Complete |
-| **2e** | 90%+ resolution with library, fix index rebuild bug | ✅ Complete (91.8%) |
+| **2e** | 90%+ resolution with library, fix index rebuild bug | 🔄 91.8% (targeting 95%+) |
 
 **Phase 2 Complete:**
 - [x] Standard library corpus parses without errors
