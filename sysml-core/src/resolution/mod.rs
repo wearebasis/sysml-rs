@@ -573,12 +573,17 @@ const MAX_INHERITANCE_DEPTH: usize = 50;
 ///
 /// This is built lazily and provides O(1) lookup of supertypes,
 /// avoiding repeated iteration over owned members during inheritance expansion.
+///
+/// NOTE: Currently scaffolded for future performance optimization.
+/// The core FI-2 fix uses resolved ElementIds directly in expand_inherited.
 #[derive(Debug)]
+#[allow(dead_code)]
 struct InheritanceIndex {
     /// Maps type ElementId -> list of direct supertype ElementIds
     direct_supertypes: HashMap<ElementId, Vec<ElementId>>,
 }
 
+#[allow(dead_code)]
 impl InheritanceIndex {
     /// Build the inheritance index from a ModelGraph.
     ///
@@ -671,6 +676,9 @@ impl<'a> ResolutionContext<'a> {
     ///
     /// This is called lazily on first use to avoid building the index
     /// if inheritance expansion is never needed.
+    ///
+    /// NOTE: Scaffolded for future performance optimization.
+    #[allow(dead_code)]
     fn ensure_inheritance_index(&mut self) {
         if self.inheritance_index.is_none() {
             self.inheritance_index = Some(InheritanceIndex::build(self.graph));
@@ -1633,6 +1641,265 @@ impl<'a> ResolutionContext<'a> {
 
         Some(current)
     }
+
+    /// Resolve a qualified name using relative scoping for subsequent segments.
+    ///
+    /// For `A::B::C`:
+    /// - A: full resolution (owned + inherited + imported + parent walking)
+    /// - B: relative resolution in A (owned + inherited + imported, NO parent walking)
+    /// - C: relative resolution in B
+    ///
+    /// This is used for feature references like `useCase::actor` where we want to
+    /// find `actor` only within `useCase`, not in parent scopes.
+    pub fn resolve_qualified_name_relative(
+        &mut self,
+        namespace_id: &ElementId,
+        qname: &str,
+    ) -> Option<ElementId> {
+        let segments = Self::parse_qualified_name_segments(qname);
+        if segments.is_empty() {
+            return None;
+        }
+
+        // First segment: normal resolution (walks up parent scopes)
+        let mut current = self.resolve_name(namespace_id, segments[0])?;
+
+        // Subsequent segments: relative resolution only (no parent walking)
+        for segment in segments.iter().skip(1) {
+            match scoping::resolve_in_relative_namespace(self.graph, &current, segment) {
+                scoping::ScopedResolution::Found(id) => current = id,
+                _ => return None,
+            }
+        }
+
+        Some(current)
+    }
+
+    /// Resolve a feature reference that may be:
+    /// - Simple name: "actor"
+    /// - Qualified path: "useCase::actor" (navigate into owned namespace with relative scoping)
+    /// - Feature chain: "subject.attribute" (navigate into type)
+    ///
+    /// This is the appropriate method for resolving redefinition, subsetting,
+    /// and reference subsetting targets.
+    pub fn resolve_feature_reference(
+        &mut self,
+        scope_id: &ElementId,
+        reference: &str,
+    ) -> Option<ElementId> {
+        // Feature chain with '.' → navigate into type
+        if Self::is_feature_chain(reference) {
+            return self.resolve_feature_chain(scope_id, reference);
+        }
+
+        // Qualified name with '::' → navigate into owned namespace (relative scoping)
+        if reference.contains("::") {
+            return self.resolve_qualified_name_relative(scope_id, reference);
+        }
+
+        // Simple name → normal resolution
+        self.resolve_name(scope_id, reference)
+    }
+
+    /// Resolve a redefined feature reference.
+    ///
+    /// For redefinitions, we need to find the INHERITED feature being redefined,
+    /// not the OWNED feature that's doing the redefining. This method:
+    /// 1. Finds the containing type (walks up from scope until reaching a Type)
+    /// 2. Looks in inherited members first (the redefined feature should be inherited)
+    /// 3. Falls back to normal resolution if not found in inherited
+    ///
+    /// This handles the common case where `:>> id = value` creates a feature that
+    /// redefines an inherited `id` - we need to find the inherited one, not the new one.
+    pub fn resolve_redefined_feature(
+        &mut self,
+        scope_id: &ElementId,
+        reference: &str,
+    ) -> Option<ElementId> {
+        // Feature chain with '.' → use feature chain resolution
+        if Self::is_feature_chain(reference) {
+            return self.resolve_feature_chain(scope_id, reference);
+        }
+
+        // Qualified name with '::' → use relative resolution
+        if reference.contains("::") {
+            return self.resolve_qualified_name_relative(scope_id, reference);
+        }
+
+        // Simple name: find the containing type and look in inherited members
+        let containing_type = self.find_containing_type(scope_id)?;
+
+        // First try to find in inherited members of the containing type
+        // Build a temporary scope table that INCLUDES inherited features even if redefined
+        if let Some(id) = self.lookup_in_inherited_only(&containing_type, reference) {
+            return Some(id);
+        }
+
+        // Fallback to normal resolution (might find in parent scopes or globals)
+        self.resolve_name(scope_id, reference)
+    }
+
+    /// Find the containing Type for a redefinition by walking up the ownership chain.
+    ///
+    /// For redefinitions, we want to find the Type that owns the redefining feature,
+    /// not the redefining feature itself (even though Features are subtypes of Type).
+    /// This is because the redefined feature is inherited by the containing type,
+    /// not by the redefining feature.
+    fn find_containing_type(&self, start_id: &ElementId) -> Option<ElementId> {
+        let mut current = start_id.clone();
+        let mut first_iteration = true;
+
+        // Walk up the ownership chain
+        for _ in 0..50 {
+            // Safety limit
+            if let Some(element) = self.graph.get_element(&current) {
+                // Check if this is a Type that's NOT a Feature (i.e., a Definition or Classifier)
+                // OR if it's a Feature and we've already moved past the starting element.
+                // This ensures we skip the immediate redefining feature but find the owner.
+                let is_type = element.kind.is_subtype_of(ElementKind::Type)
+                    || element.kind == ElementKind::Type;
+                let is_feature = element.kind.is_subtype_of(ElementKind::Feature)
+                    || element.kind == ElementKind::Feature;
+
+                // Return this element if:
+                // - It's a Type but not a Feature (like a Definition), OR
+                // - It's a Feature but not the starting element (we've moved up at least once)
+                if is_type && (!first_iteration || !is_feature) {
+                    return Some(current);
+                }
+
+                // Move to owner
+                if let Some(owner_id) = &element.owner {
+                    current = owner_id.clone();
+                    first_iteration = false;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Look up a name specifically in the inherited members of a type.
+    ///
+    /// This bypasses the normal scope table which excludes redefined inherited members.
+    /// Used for redefinition resolution where we NEED to find the inherited feature.
+    fn lookup_in_inherited_only(&mut self, type_id: &ElementId, name: &str) -> Option<ElementId> {
+        // Get the full scope table for the type
+        let table = self.get_full_scope_table(type_id);
+
+        // Look in inherited members (the table may have excluded redefined names,
+        // but we specifically want to find inherited features here)
+        if let Some(id) = table.lookup_inherited(name) {
+            return Some(id.clone());
+        }
+
+        // If not found, we need to manually search supertype chains
+        // because the scope table may have excluded this name as "redefined"
+        self.search_supertypes_for_feature(type_id, name)
+    }
+
+    /// Search through supertype chains to find a feature by name.
+    ///
+    /// This is used when the normal scope table has excluded a name due to redefinition.
+    fn search_supertypes_for_feature(&mut self, type_id: &ElementId, name: &str) -> Option<ElementId> {
+        let mut visited = HashSet::new();
+        self.search_supertypes_recursive(type_id, name, &mut visited)
+    }
+
+    fn search_supertypes_recursive(
+        &mut self,
+        type_id: &ElementId,
+        name: &str,
+        visited: &mut HashSet<ElementId>,
+    ) -> Option<ElementId> {
+        if visited.contains(type_id) {
+            return None;
+        }
+        visited.insert(type_id.clone());
+
+        // Collect all type relationships: Specialization and FeatureTyping
+        // Specialization gives us supertypes (for definitions and usages specializing other usages)
+        // FeatureTyping gives us the type (for usages typed by definitions)
+        let type_rels: Vec<_> = self
+            .graph
+            .owned_members(type_id)
+            .filter(|e| {
+                e.kind == ElementKind::Specialization
+                    || e.kind.is_subtype_of(ElementKind::Specialization)
+                    || e.kind == ElementKind::FeatureTyping
+                    || e.kind.is_subtype_of(ElementKind::FeatureTyping)
+            })
+            .cloned()
+            .collect();
+
+        for rel in type_rels {
+            // Get the target type ID based on relationship kind
+            let target_id: Option<ElementId> = if rel.kind == ElementKind::FeatureTyping
+                || rel.kind.is_subtype_of(ElementKind::FeatureTyping)
+            {
+                // FeatureTyping: get the 'type' property
+                rel.props
+                    .get(resolved_props::TYPE)
+                    .and_then(|v| v.as_ref())
+                    .cloned()
+                    .or_else(|| {
+                        let ref_name = rel
+                            .props
+                            .get(unresolved_props::TYPE)
+                            .and_then(|v| v.as_str())?;
+                        self.resolve_name(type_id, ref_name)
+                            .or_else(|| self.resolve_import_target(ref_name))
+                            .or_else(|| self.resolve_in_library_packages(ref_name))
+                    })
+            } else {
+                // Specialization: get the 'general' property
+                rel.props
+                    .get(resolved_props::GENERAL)
+                    .and_then(|v| v.as_ref())
+                    .cloned()
+                    .or_else(|| {
+                        let ref_name = rel
+                            .props
+                            .get(unresolved_props::GENERAL)
+                            .and_then(|v| v.as_str())?;
+                        self.resolve_name(type_id, ref_name)
+                            .or_else(|| self.resolve_import_target(ref_name))
+                            .or_else(|| self.resolve_in_library_packages(ref_name))
+                    })
+            };
+
+            if let Some(tid) = target_id {
+                // Look for the feature in the target type's owned members
+                for membership in self.graph.memberships(&tid) {
+                    if let Some(view) = MembershipView::try_from_element(membership) {
+                        if let Some(member_id) = view.member_element() {
+                            let member_name =
+                                view.member_name().map(|s| s.to_string()).or_else(|| {
+                                    self.graph
+                                        .get_element(member_id)
+                                        .and_then(|e| e.name.clone())
+                                });
+
+                            if member_name.as_deref() == Some(name) {
+                                return Some(member_id.clone());
+                            }
+                        }
+                    }
+                }
+
+                // Recurse into target type's supertypes
+                if let Some(found) = self.search_supertypes_recursive(&tid, name, visited) {
+                    return Some(found);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 /// Result of resolving references in a model graph.
@@ -2172,7 +2439,7 @@ fn resolve_subsetting(
         .get(unresolved_props::SUBSETTED_FEATURE)
         .and_then(|v| v.as_str())
     {
-        if let Some(resolved_id) = ctx.resolve_qualified_name(scope_id, subsetted_ref) {
+        if let Some(resolved_id) = ctx.resolve_feature_reference(scope_id, subsetted_ref) {
             updates.push((
                 element.id.clone(),
                 resolved_props::SUBSETTED_FEATURE.to_string(),
@@ -2201,7 +2468,7 @@ fn resolve_redefinition(
         .get(unresolved_props::REDEFINED_FEATURE)
         .and_then(|v| v.as_str())
     {
-        if let Some(resolved_id) = ctx.resolve_qualified_name(scope_id, redefined_ref) {
+        if let Some(resolved_id) = ctx.resolve_redefined_feature(scope_id, redefined_ref) {
             updates.push((
                 element.id.clone(),
                 resolved_props::REDEFINED_FEATURE.to_string(),
@@ -2230,7 +2497,7 @@ fn resolve_reference_subsetting(
         .get(unresolved_props::REFERENCED_FEATURE)
         .and_then(|v| v.as_str())
     {
-        if let Some(resolved_id) = ctx.resolve_qualified_name(scope_id, referenced_ref) {
+        if let Some(resolved_id) = ctx.resolve_feature_reference(scope_id, referenced_ref) {
             updates.push((
                 element.id.clone(),
                 resolved_props::REFERENCED_FEATURE.to_string(),
@@ -3859,5 +4126,148 @@ mod tests {
         let resolved = ctx.resolve_feature_chain(&fake_id, "nonExistent.field");
 
         assert!(resolved.is_none());
+    }
+
+    // === FI-2: Cross-Package Inheritance Tests ===
+
+    /// Helper to create a Specialization with a RESOLVED general reference.
+    /// This is the key fix: when the general reference is already resolved to an ElementId,
+    /// we should use it directly instead of re-resolving the name.
+    fn create_resolved_specialization(
+        graph: &mut ModelGraph,
+        owner_id: &ElementId,
+        resolved_general_id: &ElementId,
+    ) -> ElementId {
+        use crate::Value;
+
+        let mut spec = Element::new_with_kind(ElementKind::Specialization);
+        spec.set_prop(
+            resolved_props::GENERAL,
+            Value::Ref(resolved_general_id.clone()),
+        );
+
+        graph.add_owned_element(spec, owner_id.clone(), VisibilityKind::Public)
+    }
+
+    #[test]
+    fn fi2_cross_package_inheritance_uses_resolved_id() {
+        // FI-2: Test that when PackageB::Derived :> PackageA::Base is already resolved,
+        // we use the resolved ElementId directly instead of extracting "Base" and
+        // failing to re-resolve it in PackageB's scope.
+        let mut graph = ModelGraph::new();
+
+        // Create PackageA with BaseDef and an inherited member
+        let pkg_a = Element::new_with_kind(ElementKind::Package).with_name("PackageA");
+        let pkg_a_id = graph.add_element(pkg_a);
+
+        let base_def = Element::new_with_kind(ElementKind::PartDefinition).with_name("BaseDef");
+        let base_id = graph.add_owned_element(base_def, pkg_a_id.clone(), VisibilityKind::Public);
+
+        let inherited_feature =
+            Element::new_with_kind(ElementKind::PartUsage).with_name("inheritedFeature");
+        let inherited_id =
+            graph.add_owned_element(inherited_feature, base_id.clone(), VisibilityKind::Public);
+
+        // Create PackageB with Derived that specializes PackageA::BaseDef
+        // Note: NO import from PackageA - this is the key scenario!
+        let pkg_b = Element::new_with_kind(ElementKind::Package).with_name("PackageB");
+        let pkg_b_id = graph.add_element(pkg_b);
+
+        let derived_def =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("Derived");
+        let derived_id =
+            graph.add_owned_element(derived_def, pkg_b_id.clone(), VisibilityKind::Public);
+
+        // Add specialization with RESOLVED reference (not unresolved name)
+        // This simulates what happens after first-pass resolution has linked Derived to BaseDef
+        create_resolved_specialization(&mut graph, &derived_id, &base_id);
+
+        // From Derived, resolve "inheritedFeature" - should find it via inheritance
+        // even though BaseDef is in a different package with no import
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_name(&derived_id, "inheritedFeature");
+
+        assert_eq!(
+            resolved,
+            Some(inherited_id),
+            "FI-2: Should resolve inherited member using the resolved ElementId directly, \
+             not by extracting the name and re-resolving (which would fail without an import)"
+        );
+    }
+
+    #[test]
+    fn fi2_deep_cross_package_inheritance_chain() {
+        // FI-2: Test deep inheritance chain across packages:
+        // PackageC::Grandchild :> PackageB::Child :> PackageA::Base
+        let mut graph = ModelGraph::new();
+
+        // Package A: Base with a feature
+        let pkg_a = Element::new_with_kind(ElementKind::Package).with_name("PackageA");
+        let pkg_a_id = graph.add_element(pkg_a);
+
+        let base = Element::new_with_kind(ElementKind::PartDefinition).with_name("Base");
+        let base_id = graph.add_owned_element(base, pkg_a_id.clone(), VisibilityKind::Public);
+
+        let base_feature = Element::new_with_kind(ElementKind::PartUsage).with_name("baseFeature");
+        let base_feature_id =
+            graph.add_owned_element(base_feature, base_id.clone(), VisibilityKind::Public);
+
+        // Package B: Child :> Base
+        let pkg_b = Element::new_with_kind(ElementKind::Package).with_name("PackageB");
+        let pkg_b_id = graph.add_element(pkg_b);
+
+        let child = Element::new_with_kind(ElementKind::PartDefinition).with_name("Child");
+        let child_id = graph.add_owned_element(child, pkg_b_id.clone(), VisibilityKind::Public);
+
+        create_resolved_specialization(&mut graph, &child_id, &base_id);
+
+        // Package C: Grandchild :> Child
+        let pkg_c = Element::new_with_kind(ElementKind::Package).with_name("PackageC");
+        let pkg_c_id = graph.add_element(pkg_c);
+
+        let grandchild =
+            Element::new_with_kind(ElementKind::PartDefinition).with_name("Grandchild");
+        let grandchild_id =
+            graph.add_owned_element(grandchild, pkg_c_id.clone(), VisibilityKind::Public);
+
+        create_resolved_specialization(&mut graph, &grandchild_id, &child_id);
+
+        // From Grandchild, resolve "baseFeature" - should traverse 2 levels of inheritance
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_name(&grandchild_id, "baseFeature");
+
+        assert_eq!(
+            resolved,
+            Some(base_feature_id),
+            "FI-2: Should resolve inherited member through deep cross-package inheritance chain"
+        );
+    }
+
+    #[test]
+    fn fi2_inheritance_depth_limit() {
+        // Test that the depth limit prevents infinite recursion
+        let mut graph = ModelGraph::new();
+
+        let pkg = Element::new_with_kind(ElementKind::Package).with_name("TestPkg");
+        let pkg_id = graph.add_element(pkg);
+
+        // Create a self-referential specialization (pathological case)
+        let def = Element::new_with_kind(ElementKind::PartDefinition).with_name("SelfRef");
+        let def_id = graph.add_owned_element(def, pkg_id.clone(), VisibilityKind::Public);
+
+        // Add a member
+        let feature = Element::new_with_kind(ElementKind::PartUsage).with_name("feature");
+        graph.add_owned_element(feature, def_id.clone(), VisibilityKind::Public);
+
+        // Create circular specialization (SelfRef :> SelfRef)
+        // This should be handled by the visited set, but depth limit is extra protection
+        create_resolved_specialization(&mut graph, &def_id, &def_id);
+
+        // Should not hang or crash due to infinite recursion
+        let mut ctx = graph.resolution_context();
+        let resolved = ctx.resolve_name(&def_id, "feature");
+
+        // Should find the feature (owned member found before inheritance)
+        assert!(resolved.is_some(), "Should not crash on circular inheritance");
     }
 }
