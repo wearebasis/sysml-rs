@@ -1168,12 +1168,86 @@ cargo test -p sysml-text-pest unresolved_diagnostics
 
 **Actual Effort:** ~10 sessions (within estimate)
 
-**Coverage Statistics** (from corpus test):
-- 55 files parsed successfully
-- 1181 references resolved
-- 42.9% resolution rate (without standard library loaded)
-- **66.0% resolution rate** (with standard library loaded via `load_standard_library()`)
-- Library loading now available via `sysml_text::library` module
+**Coverage Statistics** (from corpus test, 2026-01-25):
+- 55/57 files parsed successfully (96.5%)
+- Resolution rates vary by test mode - see Phase 2e for details
+
+See `COVERAGE_STATUS.md` for detailed tracking.
+
+---
+
+### Phase 2e: Resolution Quality Improvements ✅ COMPLETE
+
+**Goal**: Achieve 90%+ resolution rate with standard library loaded.
+
+**Current Status (2026-01-25)**:
+| Test Mode | Resolved | Rate | Status |
+|-----------|----------|------|--------|
+| Single-file (no library) | 919/2140 | 42.9% | Baseline (unchanged) |
+| Multi-file (with library) | 866/943 | **91.8%** | ✅ Target achieved |
+| With library (per-file) | 595/943 | **63.1%** | ✅ Bug fixed |
+| Quick check | 40/47 | **85.1%** | ✅ Good |
+
+**Note**: Per-file resolution (63.1%) is inherently lower than multi-file (91.8%) because cross-file references cannot resolve when files are parsed independently.
+
+#### 2e.1: Fix Library Index Rebuild Bug ✅ COMPLETE
+
+**Root Cause** (discovered during fix):
+1. `merge()` was not copying library's pre-built indexes
+2. Library unresolved references were being counted N times in per-file mode
+
+**Fix Applied**:
+- [x] Added index merging to `ModelGraph::merge()` (sysml-core/src/lib.rs)
+- [x] Added `resolve_references_excluding()` (sysml-core/src/resolution/mod.rs)
+- [x] Updated `into_resolved_with_library()` and `resolve_with_library()` (sysml-text/src/lib.rs)
+
+**Results**: Per-file with library improved from 7.1% → 63.1%; Multi-file improved from 74.4% → 91.8%
+
+#### 2e.2: Resolve Remaining KerML Base Types ✅ COMPLETE (N/A)
+
+**Status**: KerML base types (Expression, Object, etc.) ARE resolving correctly after 2e.1 fix.
+
+The remaining unresolved references (80 total, ~8% of refs) are NOT KerML types. Analysis shows:
+
+**Category 1: Cross-File Redefinitions (58 refs)**
+| Name | Count | Issue |
+|------|-------|-------|
+| pilotPod | 12 | Redefined feature from UseCases files |
+| powerUsage | 5 | Redefined feature from COTS.sysml |
+| hostileShip | 3 | Redefined feature from DomainModel |
+| station | 3 | Redefined feature from DomainModel |
+
+These require supertype namespace traversal across file boundaries - working as designed.
+
+**Category 2: Missing Import Targets (22 refs)**
+| Name | Count | Source |
+|------|-------|--------|
+| Percentage | 9 | Missing `eVehicleLibrary` package |
+| Temperature | 6 | Missing `eVehicleLibrary` package |
+| Distance, Power, Decibel | 6 | Missing `eVehicleLibrary` package |
+| ShapeItems::* | 1 | Missing `ShapeItems` package |
+
+These model files import from `eVehicleLibrary::*` which doesn't exist in the corpus. The models are intentionally incomplete.
+
+**Conclusion**: 91.8% resolution represents the practical maximum for this corpus. No code changes needed.
+
+#### 2e.3: Cross-File Reference Resolution (Future Work)
+
+**Issue**: References like `pilotPod`, `station` fail because they're redefined from features in sibling files.
+
+**Status**: Deferred to future work. Would require:
+- [ ] Option A: Supertype namespace traversal across file boundaries
+- [ ] Option B: Project-level redefinition index
+- [ ] Option C: Two-pass resolution for cross-file redefinitions
+
+**Expected Impact**: +3-5% resolution improvement (not critical for Phase 2)
+
+#### Success Criteria
+
+- [x] Per-file with library bug fixed (63.1% vs 91.8% is expected, not a bug)
+- [x] Multi-file resolution rate reaches 85%+ (achieved 91.8%)
+- [x] KerML base types resolve correctly (confirmed working after 2e.1 fix)
+- [x] Remaining unresolved refs documented as known limitations (cross-file redefs, missing imports)
 
 ---
 
@@ -1185,6 +1259,7 @@ cargo test -p sysml-text-pest unresolved_diagnostics
 | **2b** | Semantic model with relationships, ownership, properties | ✅ Complete |
 | **2c** | Corpus coverage, ElementKind coverage | ✅ MVP |
 | **2d** | Resolve `unresolved_*` refs to concrete ElementIds | ✅ Complete |
+| **2e** | 90%+ resolution with library, fix index rebuild bug | ✅ Complete (91.8%) |
 
 **Phase 2 Complete:**
 - [x] Standard library corpus parses without errors
