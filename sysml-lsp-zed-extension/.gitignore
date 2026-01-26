@@ -2,3 +2,5 @@ target/
 extension.wasm
 grammars/sysml
 grammars/sysml.bak
+grammars/sysml.zed-cache*
+grammars/*.wasm
