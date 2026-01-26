@@ -7,7 +7,9 @@ description = "LSP server implementation for SysML v2"
 
 [dependencies]
 sysml-lsp = { workspace = true }
+sysml-core = { workspace = true }
 sysml-text = { workspace = true }
+sysml-text-pest = { workspace = true }
 sysml-ts = { workspace = true }
 sysml-span = { workspace = true }
 tower-lsp = { workspace = true }

@@ -2074,9 +2074,11 @@ dependencies = [
 name = "sysml-lsp-server"
 version = "0.1.0"
 dependencies = [
+ "sysml-core",
  "sysml-lsp",
  "sysml-span",
  "sysml-text",
+ "sysml-text-pest",
  "sysml-ts",
  "tokio",
  "tower-lsp",
@@ -2238,6 +2240,7 @@ dependencies = [
 name = "sysml-ts"
 version = "0.1.0"
 dependencies = [
+ "sysml-codegen",
  "sysml-span",
 ]
 

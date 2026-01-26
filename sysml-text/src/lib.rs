@@ -13,7 +13,7 @@
 //! ```ignore
 //! use sysml_text::library::{load_standard_library, LibraryConfig};
 //!
-//! // Load library from environment variable SYSML_LIBRARY_PATH
+//! // Load library from SYSML_LIBRARY_PATH (or ./libraries/standard if present)
 //! let config = LibraryConfig::from_env()?;
 //! let library = load_standard_library(&parser, &config)?;
 //!
@@ -148,6 +148,7 @@ impl ParseResult {
     /// use sysml_text::library::{load_standard_library, LibraryConfig};
     ///
     /// let config = LibraryConfig::from_env()?;
+    /// // Uses SYSML_LIBRARY_PATH or falls back to ./libraries/standard if present.
     /// let library = load_standard_library(&parser, &config)?;
     ///
     /// let result = parser.parse(&files).into_resolved_with_library(library);

@@ -7,14 +7,15 @@ LSP server implementation for SysML v2.
 This crate provides a Language Server Protocol server that supports IDE features for SysML v2:
 
 - Document synchronization (open, change, close)
-- Syntax error diagnostics
+- Parse + resolution diagnostics
 - Document symbols (outline view)
 
 ## Architecture
 
 The server uses:
-- `sysml-ts` for fast CST parsing (syntax highlighting, outline, basic errors)
-- `sysml-text` for full semantic parsing (when a parser backend is configured)
+- `sysml-text-pest` for full parsing + resolution diagnostics
+- `sysml-text` for parser trait + standard library loading
+- `sysml-ts` for fast CST parsing (outline)
 - `sysml-lsp` for LSP protocol type conversions
 
 ## Public API
@@ -44,7 +45,7 @@ async fn main() {
 |------------|--------|
 | Text document sync | ✅ Full sync |
 | Document symbols | ✅ Basic outline |
-| Diagnostics | ✅ Syntax errors |
+| Diagnostics | ✅ Parse + resolution diagnostics |
 | Completion | 🚧 Planned |
 | Go to definition | 🚧 Planned |
 | Hover | 🚧 Planned |
@@ -53,8 +54,9 @@ async fn main() {
 ## Dependencies
 
 - `sysml-lsp`: Protocol types
-- `sysml-text`: Parser trait
-- `sysml-ts`: CST parsing
+- `sysml-text`: Parser trait + library loader
+- `sysml-text-pest`: Semantic parser
+- `sysml-ts`: CST parsing (outline)
 - `sysml-span`: Diagnostic types
 - `tower-lsp`: LSP framework
 - `tokio`: Async runtime
@@ -82,6 +84,11 @@ Configure your VS Code extension to use this server:
   "sysml.serverPath": "/path/to/sysml-lsp-server"
 }
 ```
+
+## Standard Library
+
+The server loads the standard library for resolution using `SYSML_LIBRARY_PATH`,
+falling back to `./libraries/standard` when present.
 
 ### Neovim (nvim-lspconfig)
 

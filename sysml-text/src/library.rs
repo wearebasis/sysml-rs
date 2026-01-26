@@ -11,6 +11,7 @@
 //! use sysml_text_pest::PestParser;
 //!
 //! let config = LibraryConfig::from_env().unwrap();
+//! // Uses SYSML_LIBRARY_PATH or falls back to ./libraries/standard if present.
 //! let parser = PestParser::new();
 //! let library = load_standard_library(&parser, &config)?;
 //!
@@ -83,9 +84,16 @@ impl LibraryConfig {
     }
 
     /// Create config from SYSML_LIBRARY_PATH environment variable.
+    ///
+    /// If the variable is not set, this falls back to the repo-default
+    /// `libraries/standard` path when available.
     pub fn from_env() -> Result<Self, LibraryLoadError> {
         let path = std::env::var("SYSML_LIBRARY_PATH")
-            .map_err(|_| LibraryLoadError::EnvVarNotSet("SYSML_LIBRARY_PATH".to_string()))?;
+            .ok()
+            .map(PathBuf::from)
+            .or_else(Self::default_library_path);
+        let path =
+            path.ok_or_else(|| LibraryLoadError::EnvVarNotSet("SYSML_LIBRARY_PATH".to_string()))?;
 
         Ok(Self::new(path))
     }
@@ -102,17 +110,24 @@ impl LibraryConfig {
         let library_path = corpus.join("SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests");
         Self::new(library_path)
     }
+
+    /// Return the repo-default standard library path if it exists.
+    pub fn default_library_path() -> Option<PathBuf> {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent()?;
+        let candidate = repo_root.join("libraries").join("standard");
+        if candidate.exists() {
+            Some(candidate)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for LibraryConfig {
     fn default() -> Self {
-        Self {
-            library_path: PathBuf::new(),
-            load_kerml: true,
-            load_sysml: true,
-            load_domain: true,
-            strict: false,
-        }
+        let library_path = Self::default_library_path().unwrap_or_default();
+        Self::new(library_path)
     }
 }
 
@@ -214,10 +229,11 @@ fn load_files_from_dir<P: Parser>(
     {
         let path = entry.path();
         if path.is_file() && path.extension().map_or(false, |ext| ext == extension) {
-            let content = std::fs::read_to_string(path).map_err(|e| LibraryLoadError::ReadError {
-                path: path.to_path_buf(),
-                source: e,
-            })?;
+            let content =
+                std::fs::read_to_string(path).map_err(|e| LibraryLoadError::ReadError {
+                    path: path.to_path_buf(),
+                    source: e,
+                })?;
 
             let relative = path
                 .file_name()
@@ -318,7 +334,10 @@ mod tests {
     fn library_config_from_corpus() {
         let config = LibraryConfig::from_corpus_path("/some/corpus/path");
         // Path should NOT contain "library.kernel" (that's a subdir)
-        assert!(!config.library_path.to_string_lossy().contains("library.kernel"));
+        assert!(!config
+            .library_path
+            .to_string_lossy()
+            .contains("library.kernel"));
         // Path should contain the test directory
         assert!(config
             .library_path

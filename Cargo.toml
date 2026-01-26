@@ -35,6 +35,8 @@ members = [
     "sysml-spec-tests",
 ]
 
+exclude = ["sysml-lsp-zed-extension"]
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

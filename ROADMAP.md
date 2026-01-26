@@ -25,6 +25,21 @@ This document outlines the phased development plan for completing the sysml-rs e
 | 9 | LSP Server | 🟡 Stub | 2-3 weeks |
 | 10 | Integration & Polish | 🔴 Not Started | 2 weeks |
 
+## Package Status (Jan 2026)
+
+| Package | Status | Notes |
+|---------|--------|-------|
+| `sysml-text` (Pest parser) | ✅ **Ready for real-world use/testing** | Parses SysML v2 corpus, builds `ModelGraph`, name resolution available. |
+| `sysml-core` | ✅ Stable core | ElementKind/enums/relationships/codegen validated at build time. |
+| `sysml-span` | ✅ Stable diagnostics | Pretty/colored diagnostics with spans + related locations. |
+| `sysml-query` | 🟡 Basic | Useful but not feature-complete. |
+| `sysml-vis` / `sysml-web-vis` | 🟡 Basic | DOT/PlantUML/Cytoscape output exists; UI work remains. |
+| `sysml-run-*` | 🟡 / 🔴 | State machine runner basic; constraints runner stub. |
+| `sysml-store` | 🟡 Basic | Postgres + JSON storage; room for indexing/query APIs. |
+| `sysml-lsp-server` | 🟡 Early | LSP exists but still maturing; needs more features + robust lifecycle handling. |
+| `sysml-ts` (Tree-sitter) | 🟡 Early | Minimal CST + queries; not yet full grammar coverage. |
+| `sysml-lsp-zed-extension` | 🟡 Early | Works for dev installs; still early and tied to in-repo grammar. |
+
 ### Current Milestone: MVP Parser Complete 🎉
 
 The pest parser successfully parses the SysML v2 standard library corpus. The pipeline works:
@@ -45,7 +60,8 @@ The pest parser successfully parses the SysML v2 standard library corpus. The pi
 - ✅ Name resolution now available (via `ParseResult::into_resolved()`)
 - No expression evaluation
 - No standard library pre-loaded
-- LSP uses stub parser (not pest)
+- LSP still early (parser + diagnostics wiring is in progress)
+- Tree-sitter grammar is minimal (editor queries work, coverage is low)
 
 ### Suggested Next Steps (Pick One)
 
@@ -67,6 +83,14 @@ sysml query vehicle.sysml "requirements where unverified"
 > **Coverage Strategy**: This project uses **build-time spec validation**—the build FAILS if generated code doesn't match the spec. This guarantees 100% coverage of types, enums, and relationships. See [Appendix B: Codegen & Coverage Strategy](#appendix-b-codegen--coverage-strategy) for details. See also [Appendix C: Build-Time Resilience](#appendix-c-build-time-resilience--validation-roadmap) for the validation gap analysis and improvement roadmap.
 
 ---
+
+## What Can Be Built Next (On Top of Current Work)
+
+- **Runners**: expand state machine execution, add constraint evaluation + test harnesses.
+- **IDE features**: document symbols, go-to-definition, semantic tokens, quick fixes.
+- **Visualization**: richer diagram layouts, interactive web viewer, model diffing.
+- **CLI**: parse/validate/visualize/query entrypoints for demos and CI checks.
+- **Storage/Query**: stronger query APIs, model indexing, cross-file resolution.
 
 ## Phase 0: Foundation Hardening + Codegen Infrastructure
 
