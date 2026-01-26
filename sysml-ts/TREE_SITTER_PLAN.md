@@ -88,8 +88,8 @@ Goal: verify grammar coverage against real syntax expectations.
 ### Phase 5 — Editor Queries
 Goal: full IDE experience (highlighting, folding, etc.).
 
-- Generate baseline `highlights.scm` from keyword + enum lists.
-- Add `folds.scm`, `indents.scm`, `brackets.scm`, `locals.scm`.
+- [x] Generate baseline `highlights.scm` from keyword + enum lists.
+- [x] Add `folds.scm`, `brackets.scm`, `indents.scm`, `locals.scm`.
 - Keep these queries versioned in `sysml-ts` for reuse in Zed/VS Code.
 
 ## Where This Hooks In

@@ -16,6 +16,11 @@
 
 (comment) @comment
 
+[
+  "{"
+  "}"
+] @punctuation.bracket
+
 ["true" "false" "null"] @constant.builtin
 
 (package_decl name: (identifier) @module)
@@ -31,3 +36,6 @@
 
 (type_ref (identifier) @type)
 (qualified_name (identifier) @type)
+
+(typing ":" @punctuation.delimiter)
+(qualified_name "::" @punctuation.delimiter)

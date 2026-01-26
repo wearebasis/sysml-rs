@@ -23,11 +23,11 @@ and any LSP semantic token integration).
 - [ ] Validate grammar against existing parser test corpus
 
 ## Queries (editor features)
-- [ ] `highlights.scm` for keywords, types, identifiers, literals
-- [ ] `folds.scm` for blocks/packages
-- [ ] `indents.scm` for auto-indentation
-- [ ] `brackets.scm` for bracket matching
-- [ ] `locals.scm` for local scope highlighting (if needed)
+- [x] `highlights.scm` for keywords, types, identifiers, literals
+- [x] `folds.scm` for blocks/packages
+- [x] `brackets.scm` for bracket matching
+- [x] `indents.scm` for auto-indentation
+- [x] `locals.scm` for local scope highlighting (if needed)
 
 ## CST / API
 - [ ] Map Tree-sitter nodes into `SyntaxNode` with spans
