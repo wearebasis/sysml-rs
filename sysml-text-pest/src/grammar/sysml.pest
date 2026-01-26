@@ -1156,8 +1156,24 @@ OwnedCrossMultiplicityMember = { OwnedCrossMultiplicity }
 
 OwnedCrossMultiplicity = { OwnedMultiplicity }
 
+// InterfaceUsage per SysML.xtext lines 1150-1156
+// InterfaceUsageDeclaration = UsageDeclaration? ( ConnectorKeyword InterfacePart )? | InterfacePart
+// The negative lookahead !KW_CONNECT prevents "connect" from being parsed as a name
+// Valid forms:
+//   interface;                          -- empty interface usage
+//   interface connect (a, b);           -- anonymous with n-ary endpoints
+//   interface myName connect (a, b);    -- named with n-ary endpoints
+//   interface (a, b);                   -- anonymous, InterfacePart directly
+//   interface myName : Type connect ... -- named with typing
 InterfaceUsage = {
-    OccurrenceUsagePrefix ~ KW_INTERFACE ~ UsageDeclaration? ~ (KW_CONNECT ~ InterfacePart)? ~ InterfaceBody
+    OccurrenceUsagePrefix ~ KW_INTERFACE ~ (
+        // InterfacePart directly: interface (a, b);
+        InterfacePart
+        // connect + InterfacePart: interface connect (a, b);
+        | KW_CONNECT ~ InterfacePart
+        // UsageDeclaration with optional connect: interface name; or interface name connect (a, b);
+        | !KW_CONNECT ~ UsageDeclaration ~ (KW_CONNECT ~ InterfacePart)?
+    )? ~ InterfaceBody
 }
 
 InterfacePart = { BinaryInterfacePart | NaryInterfacePart }
