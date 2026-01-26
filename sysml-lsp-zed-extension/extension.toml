@@ -9,7 +9,7 @@ repository = "https://github.com/wearebasis/sysml-rs"
 [grammars.sysml]
 repository = "file:///home/ricky/personal_repos/sysml-rs/sysml-rs"
 path = "sysml-ts/tree-sitter"
-rev = "main"
+rev = "5e07787e628502f577066fd7b68feda97397476e"
 
 [language_servers.sysml-lsp]
 name = "SysML LSP"

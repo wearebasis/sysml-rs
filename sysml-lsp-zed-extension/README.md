@@ -38,7 +38,10 @@ cargo build -p sysml-lsp-server
 
 ## Tree-sitter
 Zed requires a Tree-sitter grammar to register a language. This extension points at
-the in-repo grammar in `sysml-ts/tree-sitter`, so ensure the generated parser exists:
+the in-repo grammar in `sysml-ts/tree-sitter`. If your repo lives elsewhere,
+update the `repository` path in `extension.toml`.
+
+Ensure the generated parser exists:
 
 ```
 cd sysml-ts/tree-sitter
