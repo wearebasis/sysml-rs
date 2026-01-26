@@ -2,6 +2,9 @@
 
 This file tracks parsing and resolution coverage metrics over time. Update after significant changes.
 
+> **Note**: The reference bundle now lives at `references/sysmlv2` (in-repo). Older mentions of
+> `sysmlv2-references` in examples should be interpreted as `references/sysmlv2`.
+
 ---
 
 ## Latest Status (2026-01-25)
@@ -229,15 +232,15 @@ These require different fixes (expression parsing, custom library support).
 
 ```bash
 # Parsing coverage only
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=references/sysmlv2 \
 cargo test -p sysml-spec-tests corpus_coverage -- --ignored --nocapture
 
 # Quick smoke test (fast, 3-5 files)
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=references/sysmlv2 \
 cargo test -p sysml-spec-tests corpus_smoke_test -- --ignored --nocapture
 
 # Full resolution tests (slow, multi-file + library)
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=references/sysmlv2 \
 cargo test -p sysml-spec-tests corpus_resolution_multi_file -- --ignored --nocapture
 ```
 

@@ -10,7 +10,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-export SYSML_CORPUS_PATH="${SYSML_CORPUS_PATH:-/home/ricky/personal_repos/sysml-rs/sysmlv2-references}"
+export SYSML_CORPUS_PATH="${SYSML_CORPUS_PATH:-$(pwd)/references/sysmlv2}"
 BASELINE_DIR="benchmarks/baselines"
 FLAME_DIR="benchmarks/flamegraphs"
 
@@ -79,7 +79,7 @@ case "${1:-}" in
         echo "  --compare [FILE] Compare current results with baseline"
         echo ""
         echo "Environment:"
-        echo "  SYSML_CORPUS_PATH  Path to sysmlv2-references (default: auto-detect)"
+        echo "  SYSML_CORPUS_PATH  Path to sysmlv2 references (default: ./references/sysmlv2)"
         echo "  BENCH_ITERATIONS   Number of resolution iterations (default: 5)"
         ;;
 

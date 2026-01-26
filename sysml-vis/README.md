@@ -15,8 +15,8 @@ For the detailed plan and milestones, see `sysml-vis/ROADMAP.md`.
 ## Planned Views (Spec-Based)
 
 The SysML v2 standard library defines view types in:
-- `sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/StandardViewDefinitions.sysml`
-- `sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Views.sysml`
+- `references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/StandardViewDefinitions.sysml`
+- `references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Views.sysml`
 
 These are the views we plan to support from the ModelGraph:
 

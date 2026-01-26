@@ -5,7 +5,7 @@
 //!
 //! Run with:
 //! ```bash
-//! SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+//! SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 //!     cargo run -p sysml-spec-tests --example categorize_failures
 //! ```
 
@@ -35,7 +35,7 @@ fn main() {
         Some(c) => c,
         None => {
             eprintln!("Error: Failed to load configuration");
-            eprintln!("Set SYSML_CORPUS_PATH to the sysmlv2-references directory");
+            eprintln!("Set SYSML_CORPUS_PATH to references/sysmlv2");
             std::process::exit(1);
         }
     };

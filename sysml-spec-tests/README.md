@@ -126,11 +126,11 @@ cargo test -p sysml-spec-tests
 
 ```bash
 # Point to your local copy of the references
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
   cargo test -p sysml-spec-tests -- --ignored
 
 # Or with more output
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
   cargo test -p sysml-spec-tests corpus_coverage -- --ignored --nocapture
 ```
 

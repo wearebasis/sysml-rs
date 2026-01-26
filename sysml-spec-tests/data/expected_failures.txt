@@ -4,7 +4,7 @@
 # The list MUST shrink over time as parser bugs are fixed.
 #
 # Format: One file path pattern per line
-# - Use relative paths from sysmlv2-references/
+# - Use relative paths from references/sysmlv2/
 # - Use **/ prefix for "any directory" matching
 # - Lines starting with # are comments
 # - Empty lines are ignored

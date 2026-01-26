@@ -162,10 +162,12 @@ This crate needs the official SysML spec files to build:
 
 ```bash
 # Option 1: Environment variable
+export SYSML_REFS_DIR=/path/to/references/sysmlv2
+# (legacy name still supported)
 export SYSMLV2_REFS_DIR=/path/to/sysmlv2-references
 
-# Option 2: Place as sibling to workspace
-ls ../sysmlv2-references/  # Should exist
+# Option 2: In-repo references (recommended)
+ls references/sysmlv2/  # Should exist
 ```
 
 ### Grammar Location

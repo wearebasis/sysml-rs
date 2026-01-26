@@ -117,17 +117,17 @@ This is now the dominant cost after the LineIndex fix, which is expected for a p
 ```bash
 # Generate flamegraph for multi-file corpus resolution
 sudo sysctl kernel.perf_event_paranoid=-1
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 CARGO_PROFILE_RELEASE_DEBUG=true \
 cargo flamegraph -p sysml-spec-tests --test corpus_tests \
   -o /tmp/corpus_resolution_multi_file.svg -- corpus_resolution_multi_file --ignored --nocapture
 
 # Quick corpus coverage test
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 cargo test -p sysml-spec-tests corpus_coverage -- --ignored --nocapture
 
 # Full corpus resolution test (multi-file + library)
-SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 cargo test -p sysml-spec-tests corpus_resolution_multi_file -- --ignored --nocapture
 ```
 

@@ -22,17 +22,13 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 
 fn main() {
     // Determine paths relative to the manifest directory
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let repo_root = Path::new(&manifest_dir).join("..");
-    let spec_dir = repo_root.join("spec");
-    let refs_dir = if spec_dir.exists() {
-        spec_dir
-    } else {
-        repo_root.join("..").join("sysmlv2-references")
-    };
+    let refs_dir = find_references_dir(&repo_root);
 
     let kerml_vocab_path = refs_dir.join("Kerml-Vocab.ttl");
     let sysml_vocab_path = refs_dir.join("SysML-vocab.ttl");
@@ -212,8 +208,8 @@ fn main() {
     // =====================================================================
 
     // Paths to Xtext grammar files
-    // Note: Xtext files are only in sysmlv2-references, not in spec/
-    let xtext_refs_dir = repo_root.join("..").join("sysmlv2-references");
+    // Note: Xtext files live in references (not spec/)
+    let xtext_refs_dir = find_references_dir(&repo_root);
     let pilot_impl_dir = xtext_refs_dir.join("SysML-v2-Pilot-Implementation");
     let kerml_xtext_path = pilot_impl_dir
         .join("org.omg.kerml.xtext/src/org/omg/kerml/xtext/KerML.xtext");
@@ -700,4 +696,32 @@ fn main() {
         "cargo:warning=Generated cross-reference registry with {} properties",
         all_cross_refs.len()
     );
+}
+
+fn find_references_dir(repo_root: &Path) -> PathBuf {
+    if let Ok(refs_dir) = env::var("SYSML_REFS_DIR") {
+        let path = PathBuf::from(refs_dir);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    if let Ok(refs_dir) = env::var("SYSMLV2_REFS_DIR") {
+        let path = PathBuf::from(refs_dir);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    let in_repo = repo_root.join("references").join("sysmlv2");
+    if in_repo.exists() {
+        return in_repo;
+    }
+
+    let spec_dir = repo_root.join("spec");
+    if spec_dir.exists() {
+        return spec_dir;
+    }
+
+    repo_root.join("..").join("sysmlv2-references")
 }

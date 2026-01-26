@@ -691,9 +691,18 @@ mod library_loading {
     #[ignore = "Requires corpus path"]
     fn parse_actual_measurement_references() {
         // Test parsing the actual MeasurementReferences.sysml file
-        let content = std::fs::read_to_string(
-            "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.domain/Quantities and Units/MeasurementReferences.sysml"
-        ).expect("Failed to read file");
+        let Some(root) = sysml_spec_tests::try_find_references_dir() else {
+            eprintln!("Skipping test: references directory not found");
+            return;
+        };
+        let path = root.join(
+            "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.domain/Quantities and Units/MeasurementReferences.sysml",
+        );
+        if !path.exists() {
+            eprintln!("Skipping test: MeasurementReferences.sysml not found at {:?}", path);
+            return;
+        }
+        let content = std::fs::read_to_string(&path).expect("Failed to read file");
 
         let parser = PestParser::new();
         let file = SysmlFile::new("MeasurementReferences.sysml", &content);

@@ -7,7 +7,7 @@
 //!
 //! Or with the corpus:
 //! ```bash
-//! SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+//! SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 //!   cargo run -p sysml-text-pest --example quick_bench --release -- --corpus
 //! ```
 

@@ -33,7 +33,7 @@ const EXTRA_KEYWORDS: &[&str] = &[
 
 fn main() {
     // Find the references directory
-    let refs_dir = find_references_dir().expect("Could not find sysmlv2-references directory");
+    let refs_dir = find_references_dir().expect("Could not find references/sysmlv2 directory");
 
     // Print rerun triggers for spec files
     println!(
@@ -307,9 +307,15 @@ fn main() {
     fs::write(&debug_path, grammar).expect("Failed to write debug grammar copy");
 }
 
-/// Find the sysmlv2-references directory by searching upward from the crate directory.
+/// Find the sysmlv2 references directory by searching upward from the crate directory.
 fn find_references_dir() -> Option<PathBuf> {
-    // First, check if SYSMLV2_REFS_DIR environment variable is set
+    // First, check if SYSML_REFS_DIR or SYSMLV2_REFS_DIR environment variable is set
+    if let Ok(refs_dir) = env::var("SYSML_REFS_DIR") {
+        let path = PathBuf::from(refs_dir);
+        if path.exists() {
+            return Some(path);
+        }
+    }
     if let Ok(refs_dir) = env::var("SYSMLV2_REFS_DIR") {
         let path = PathBuf::from(refs_dir);
         if path.exists() {
@@ -321,6 +327,12 @@ fn find_references_dir() -> Option<PathBuf> {
     let mut current = PathBuf::from(env::var("CARGO_MANIFEST_DIR").ok()?);
 
     for _ in 0..5 {
+        // Check for in-repo references folder
+        let refs_path = current.join("references").join("sysmlv2");
+        if refs_path.exists() && refs_path.is_dir() {
+            return Some(refs_path);
+        }
+
         // Check for sysmlv2-references at this level
         let refs_path = current.join("sysmlv2-references");
         if refs_path.exists() && refs_path.is_dir() {
@@ -337,9 +349,14 @@ fn find_references_dir() -> Option<PathBuf> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").ok()?);
     if let Some(parent) = manifest_dir.parent() {
         if let Some(grandparent) = parent.parent() {
-            let refs_path = grandparent.join("sysmlv2-references");
-            if refs_path.exists() && refs_path.is_dir() {
-                return Some(refs_path);
+            let candidate_paths = [
+                grandparent.join("references").join("sysmlv2"),
+                grandparent.join("sysmlv2-references"),
+            ];
+            for refs_path in candidate_paths {
+                if refs_path.exists() && refs_path.is_dir() {
+                    return Some(refs_path);
+                }
             }
         }
     }

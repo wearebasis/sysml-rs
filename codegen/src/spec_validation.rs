@@ -525,11 +525,14 @@ mod integration_tests {
     #[test]
     fn test_real_file_parsing() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let spec_dir = manifest_dir.join("..").join("spec");
-        let refs_dir = if spec_dir.exists() {
+        let repo_root = manifest_dir.join("..");
+        let spec_dir = repo_root.join("spec");
+        let refs_dir = if repo_root.join("references").join("sysmlv2").exists() {
+            repo_root.join("references").join("sysmlv2")
+        } else if spec_dir.exists() {
             spec_dir
         } else {
-            manifest_dir.join("..").join("..").join("sysmlv2-references")
+            repo_root.join("..").join("sysmlv2-references")
         };
 
         // Parse TTL

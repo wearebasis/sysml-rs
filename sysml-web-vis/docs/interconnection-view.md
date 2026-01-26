@@ -1,10 +1,10 @@
 # InterconnectionView design notes (SysML v2)
 
 Source references:
-- sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/StandardViewDefinitions.sysml
-- sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Connections.sysml
-- sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Ports.sysml
-- sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Interfaces.sysml
+- references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/StandardViewDefinitions.sysml
+- references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Connections.sysml
+- references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Ports.sysml
+- references/sysmlv2/SysML-v2-Pilot-Implementation/sysml.library/Systems Library/Interfaces.sysml
 
 ## Spec intent summary
 InterconnectionView presents exposed features as nodes, nested features as nested

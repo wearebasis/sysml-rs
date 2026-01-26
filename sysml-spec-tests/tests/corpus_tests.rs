@@ -4,7 +4,7 @@
 //! coverage and resolution behavior. Tests are `#[ignore]` by default
 //! and enabled via:
 //! ```bash
-//! SYSML_CORPUS_PATH=/path/to/sysmlv2-references cargo test -p sysml-spec-tests -- --ignored
+//! SYSML_CORPUS_PATH=references/sysmlv2 cargo test -p sysml-spec-tests -- --ignored
 //! ```
 
 use std::collections::HashSet;
@@ -85,7 +85,7 @@ fn corpus_coverage() {
 ///
 /// Run with:
 /// ```bash
-/// SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+/// SYSML_CORPUS_PATH=references/sysmlv2 \
 ///     cargo test -p sysml-spec-tests corpus_smoke_test -- --ignored --nocapture
 /// ```
 #[test]
@@ -163,7 +163,7 @@ fn corpus_smoke_test() {
 ///
 /// Run with:
 /// ```bash
-/// SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+/// SYSML_CORPUS_PATH=references/sysmlv2 \
 ///     cargo test -p sysml-spec-tests corpus_resolution_multi_file -- --ignored --nocapture
 /// ```
 #[test]

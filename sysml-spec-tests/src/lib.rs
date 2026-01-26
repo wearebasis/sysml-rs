@@ -18,7 +18,7 @@
 //!
 //! ```bash
 //! # Enable corpus tests
-//! SYSML_CORPUS_PATH=/path/to/sysmlv2-references cargo test -p sysml-spec-tests -- --ignored
+//! SYSML_CORPUS_PATH=/path/to/references/sysmlv2 cargo test -p sysml-spec-tests -- --ignored
 //! ```
 
 pub mod corpus;
@@ -31,11 +31,31 @@ pub mod rule_coverage;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// Locate the sysmlv2-references directory.
+fn resolve_env_path(env_path: &str) -> Option<PathBuf> {
+    let candidate = PathBuf::from(env_path);
+    if candidate.exists() {
+        return Some(candidate);
+    }
+
+    if candidate.is_relative() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Some(repo_root) = manifest_dir.parent() {
+            let joined = repo_root.join(&candidate);
+            if joined.exists() {
+                return Some(joined);
+            }
+        }
+    }
+
+    None
+}
+
+/// Locate the sysmlv2 references directory.
 ///
 /// Searches in order:
 /// 1. SYSML_CORPUS_PATH environment variable
-/// 2. Common relative paths (../sysmlv2-references, ../../sysmlv2-references, etc.)
+/// 2. SYSML_REFS_DIR / SYSMLV2_REFS_DIR (shared references)
+/// 3. Common relative paths (references/sysmlv2, ../sysmlv2-references, etc.)
 ///
 /// # Panics
 ///
@@ -44,14 +64,28 @@ use std::path::{Path, PathBuf};
 pub fn find_references_dir() -> PathBuf {
     // Check environment variable first
     if let Ok(env_path) = std::env::var("SYSML_CORPUS_PATH") {
-        let path = PathBuf::from(&env_path);
-        if path.exists() {
+        if let Some(path) = resolve_env_path(&env_path) {
+            return path;
+        }
+    }
+
+    if let Ok(env_path) = std::env::var("SYSML_REFS_DIR") {
+        if let Some(path) = resolve_env_path(&env_path) {
+            return path;
+        }
+    }
+
+    if let Ok(env_path) = std::env::var("SYSMLV2_REFS_DIR") {
+        if let Some(path) = resolve_env_path(&env_path) {
             return path;
         }
     }
 
     // Try common relative paths
     let candidates = [
+        "../references/sysmlv2",
+        "../../references/sysmlv2",
+        "references/sysmlv2",
         "../sysmlv2-references",
         "../../sysmlv2-references",
         "sysmlv2-references",
@@ -67,8 +101,8 @@ pub fn find_references_dir() -> PathBuf {
     }
 
     panic!(
-        "Could not find sysmlv2-references directory.\n\
-         Set SYSML_CORPUS_PATH environment variable or ensure sysmlv2-references is available.\n\
+        "Could not find sysmlv2 references directory.\n\
+         Set SYSML_CORPUS_PATH (or SYSML_REFS_DIR / SYSMLV2_REFS_DIR) or ensure references/sysmlv2 is available.\n\
          Searched: {:?}",
         candidates
     );
@@ -80,14 +114,28 @@ pub fn find_references_dir() -> PathBuf {
 pub fn try_find_references_dir() -> Option<PathBuf> {
     // Check environment variable first
     if let Ok(env_path) = std::env::var("SYSML_CORPUS_PATH") {
-        let path = PathBuf::from(&env_path);
-        if path.exists() {
+        if let Some(path) = resolve_env_path(&env_path) {
+            return Some(path);
+        }
+    }
+
+    if let Ok(env_path) = std::env::var("SYSML_REFS_DIR") {
+        if let Some(path) = resolve_env_path(&env_path) {
+            return Some(path);
+        }
+    }
+
+    if let Ok(env_path) = std::env::var("SYSMLV2_REFS_DIR") {
+        if let Some(path) = resolve_env_path(&env_path) {
             return Some(path);
         }
     }
 
     // Try common relative paths
     let candidates = [
+        "../references/sysmlv2",
+        "../../references/sysmlv2",
+        "references/sysmlv2",
         "../sysmlv2-references",
         "../../sysmlv2-references",
         "sysmlv2-references",
@@ -108,7 +156,7 @@ pub fn try_find_references_dir() -> Option<PathBuf> {
 /// Configuration for coverage tests.
 #[derive(Debug, Clone)]
 pub struct CoverageConfig {
-    /// Path to the sysmlv2-references directory.
+    /// Path to the SysML v2 references directory.
     pub corpus_path: PathBuf,
     /// Paths within corpus to search for .sysml files.
     pub corpus_subdirs: Vec<&'static str>,
@@ -120,6 +168,7 @@ impl CoverageConfig {
     /// Returns `None` if `SYSML_CORPUS_PATH` is not set.
     pub fn from_env() -> Option<Self> {
         let corpus_path = std::env::var("SYSML_CORPUS_PATH").ok()?;
+        let corpus_path = resolve_env_path(&corpus_path).unwrap_or_else(|| PathBuf::from(corpus_path));
         Some(CoverageConfig {
             corpus_path: PathBuf::from(corpus_path),
             corpus_subdirs: vec![
@@ -134,7 +183,7 @@ impl CoverageConfig {
     /// Create configuration for local development (relative path).
     pub fn local_dev() -> Self {
         CoverageConfig {
-            corpus_path: PathBuf::from("../sysmlv2-references"),
+            corpus_path: PathBuf::from("../references/sysmlv2"),
             corpus_subdirs: vec![
                 "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems",
                 "SysML-v2-Models/models",

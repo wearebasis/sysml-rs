@@ -5,7 +5,17 @@ use sysml_text_pest::PestParser;
 
 fn main() {
     let corpus_path = std::env::var("SYSML_CORPUS_PATH")
-        .unwrap_or_else(|_| "/home/ricky/personal_repos/sysml-rs/sysmlv2-references".to_string());
+        .or_else(|_| std::env::var("SYSML_REFS_DIR"))
+        .or_else(|_| std::env::var("SYSMLV2_REFS_DIR"))
+        .unwrap_or_else(|_| {
+            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let repo_root = manifest_dir.parent().unwrap_or(&manifest_dir);
+            repo_root
+                .join("references")
+                .join("sysmlv2")
+                .to_string_lossy()
+                .to_string()
+        });
 
     let parser = PestParser::new();
 

@@ -5,7 +5,7 @@
 //!
 //! Run with:
 //! ```bash
-//! SYSML_CORPUS_PATH=/path/to/sysmlv2-references \
+//! SYSML_CORPUS_PATH=/path/to/references/sysmlv2 \
 //!     cargo run -p sysml-spec-tests --example resolution_debug -- path/to/file.sysml
 //! ```
 
@@ -29,7 +29,7 @@ fn main() {
         eprintln!("Debug resolution for a single SysML file.");
         eprintln!();
         eprintln!("Environment variables:");
-        eprintln!("  SYSML_CORPUS_PATH - Path to sysmlv2-references (required for library)");
+        eprintln!("  SYSML_CORPUS_PATH - Path to references/sysmlv2 (required for library)");
         std::process::exit(1);
     }
 

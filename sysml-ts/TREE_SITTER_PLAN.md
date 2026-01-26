@@ -95,7 +95,7 @@ Goal: full IDE experience (highlighting, folding, etc.).
 ## Where This Hooks In
 
 - **Inputs**:
-  - `sysmlv2-references/.../*.xtext` (Xtext sources)
+  - `references/sysmlv2/.../*.xtext` (Xtext sources)
   - `sysml-text-pest/src/grammar/fragments/*.pest` (structure reference)
   - `codegen` utilities (keywords/operators/enums/precedence)
 
@@ -112,7 +112,7 @@ Goal: full IDE experience (highlighting, folding, etc.).
 
 ## Validation Steps (for this phase)
 
-1) Regenerate token tables (requires sysmlv2-references):
+1) Regenerate token tables (requires references/sysmlv2):
 ```
 cargo run -p sysml-ts --bin generate_ts_tokens --features codegen
 ```

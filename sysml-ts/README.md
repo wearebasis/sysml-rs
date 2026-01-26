@@ -102,7 +102,7 @@ To regenerate:
 cargo run -p sysml-ts --bin generate_ts_tokens --features codegen
 ```
 
-This writes `sysml-ts/generated/*.js` using `sysmlv2-references` as the source of truth.
+This writes `sysml-ts/generated/*.js` using `references/sysmlv2` as the source of truth.
 
 ## Tree-sitter stub + coverage check
 

@@ -2,6 +2,44 @@
 
 use sysml_text::{Parser, SysmlFile};
 use sysml_text_pest::PestParser;
+use std::path::PathBuf;
+
+fn references_root() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("SYSML_CORPUS_PATH") {
+        let candidate = PathBuf::from(path);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+
+    if let Ok(path) = std::env::var("SYSML_REFS_DIR") {
+        let candidate = PathBuf::from(path);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+
+    if let Ok(path) = std::env::var("SYSMLV2_REFS_DIR") {
+        let candidate = PathBuf::from(path);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir.parent()?;
+    let in_repo = repo_root.join("references").join("sysmlv2");
+    if in_repo.exists() {
+        return Some(in_repo);
+    }
+
+    let legacy = repo_root.parent()?.join("sysmlv2-references");
+    if legacy.exists() {
+        return Some(legacy);
+    }
+
+    None
+}
 
 #[test]
 fn parse_simple_package() {
@@ -705,12 +743,13 @@ package FlowDefinitions {
 fn parse_sysml_standard_library_file() {
     // Test parsing the actual SysML.sysml file from the standard library
     // This was a regression - the file failed to parse after grammar changes
-    let sysml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/SysML.sysml");
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
+    };
+    let sysml_path = root.join(
+        "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/SysML.sysml",
+    );
 
     if !sysml_path.exists() {
         eprintln!("Skipping test: SysML.sysml not found at {:?}", sysml_path);
@@ -810,12 +849,13 @@ package TestAsCast {
 #[test]
 fn parse_items_stdlib_file() {
     // Test parsing the actual Items.sysml file from the standard library
-    let items_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/Items.sysml");
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
+    };
+    let items_path = root.join(
+        "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/Items.sysml",
+    );
 
     if !items_path.exists() {
         eprintln!("Skipping test: Items.sysml not found at {:?}", items_path);
@@ -1076,9 +1116,18 @@ package TestImpliesSimple {
 #[test]
 fn parse_flows_sysml() {
     let parser = PestParser::new();
-    let path = "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/Flows.sysml";
-    let source = std::fs::read_to_string(path)
-        .expect("Failed to read Flows.sysml");
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
+    };
+    let path = root.join(
+        "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/Flows.sysml",
+    );
+    if !path.exists() {
+        eprintln!("Skipping test: Flows.sysml not found at {:?}", path);
+        return;
+    }
+    let source = std::fs::read_to_string(&path).expect("Failed to read Flows.sysml");
     
     let files = vec![SysmlFile::new("Flows.sysml", &source)];
     let result = parser.parse(&files);
@@ -1104,9 +1153,18 @@ fn parse_flows_sysml() {
 #[test]
 fn parse_states_sysml() {
     let parser = PestParser::new();
-    let path = "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/States.sysml";
-    let source = std::fs::read_to_string(path)
-        .expect("Failed to read States.sysml");
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
+    };
+    let path = root.join(
+        "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.systems/States.sysml",
+    );
+    if !path.exists() {
+        eprintln!("Skipping test: States.sysml not found at {:?}", path);
+        return;
+    }
+    let source = std::fs::read_to_string(&path).expect("Failed to read States.sysml");
 
     let files = vec![SysmlFile::new("States.sysml", &source)];
     let result = parser.parse(&files);
@@ -1911,9 +1969,18 @@ standard library package Base {
 #[test]
 fn test_real_base_kerml() {
     let parser = PestParser::new();
-    let source = std::fs::read_to_string(
-        "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.kernel/Base.kerml"
-    ).expect("Failed to read Base.kerml");
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
+    };
+    let path = root.join(
+        "SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests/library.kernel/Base.kerml",
+    );
+    if !path.exists() {
+        eprintln!("Skipping test: Base.kerml not found at {:?}", path);
+        return;
+    }
+    let source = std::fs::read_to_string(&path).expect("Failed to read Base.kerml");
 
     let files = vec![SysmlFile::new("Base.kerml", &source)];
     let result = parser.parse(&files);
@@ -2374,15 +2441,18 @@ standard library package Occurrences {
 #[test]
 fn test_real_occurrences_kerml() {
     let parser = PestParser::new();
-    let path = "/home/ricky/personal_repos/sysml-rs/sysmlv2-references/SysML-v2-Pilot-Implementation/sysml.library/Kernel Libraries/Kernel Semantic Library/Occurrences.kerml";
-    
-    let source = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Skipping test: could not read file: {}", e);
-            return;
-        }
+    let Some(root) = references_root() else {
+        eprintln!("Skipping test: references directory not found");
+        return;
     };
+    let path = root.join(
+        "SysML-v2-Pilot-Implementation/sysml.library/Kernel Libraries/Kernel Semantic Library/Occurrences.kerml",
+    );
+    if !path.exists() {
+        eprintln!("Skipping test: Occurrences.kerml not found at {:?}", path);
+        return;
+    }
+    let source = std::fs::read_to_string(&path).expect("Failed to read Occurrences.kerml");
 
     let files = vec![SysmlFile::new("Occurrences.kerml", &source)];
     let result = parser.parse(&files);

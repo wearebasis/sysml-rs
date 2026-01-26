@@ -4,7 +4,7 @@
 //! It derives the expected element kinds from the spec TTL vocabulary files
 //! using the codegen crate.
 //!
-//! **Note**: This module requires the sysmlv2-references directory to be available.
+//! **Note**: This module requires the SysML v2 references directory to be available.
 //! Set SYSML_CORPUS_PATH or ensure the references are in a standard location.
 
 use std::collections::HashSet;
@@ -76,10 +76,10 @@ impl Default for ElementCoverageTracker {
     }
 }
 
-/// Path to KerML vocabulary file relative to sysmlv2-references.
+/// Path to KerML vocabulary file relative to the references root.
 pub const KERML_VOCAB_PATH: &str = "Kerml-Vocab.ttl";
 
-/// Path to SysML vocabulary file relative to sysmlv2-references.
+/// Path to SysML vocabulary file relative to the references root.
 pub const SYSML_VOCAB_PATH: &str = "SysML-vocab.ttl";
 
 /// Load element types from the TTL vocabulary files.
@@ -89,7 +89,7 @@ pub const SYSML_VOCAB_PATH: &str = "SysML-vocab.ttl";
 ///
 /// # Arguments
 ///
-/// * `references_path` - Path to the sysmlv2-references directory
+/// * `references_path` - Path to the SysML v2 references directory
 ///
 /// # Returns
 ///
@@ -118,7 +118,7 @@ pub fn load_element_types_from_spec(
 ///
 /// # Arguments
 ///
-/// * `references_path` - Path to the sysmlv2-references directory
+/// * `references_path` - Path to the SysML v2 references directory
 pub fn all_element_kinds_from_spec(references_path: &Path) -> std::io::Result<HashSet<String>> {
     let (kerml_types, sysml_types) = load_element_types_from_spec(references_path)?;
 
@@ -262,7 +262,7 @@ mod tests {
     fn require_spec_files() -> std::path::PathBuf {
         try_find_references_dir().expect(
             "Spec files required for this test. Set SYSML_CORPUS_PATH or \
-             ensure sysmlv2-references is available.",
+             ensure references/sysmlv2 is available.",
         )
     }
 

@@ -314,7 +314,8 @@ cargo test -p sysml-codegen
 ## Reference Files
 
 Codegen reads spec files from the repo-local `spec/` directory, with a fallback to
-`../sysmlv2-references` if you keep the full OMG reference bundle outside the repo.
+`references/sysmlv2` (or `SYSML_REFS_DIR` / `SYSMLV2_REFS_DIR`) if you keep the full
+OMG reference bundle outside the repo.
 
 ```
 spec/

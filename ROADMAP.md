@@ -2,6 +2,9 @@
 
 This document outlines the phased development plan for completing the sysml-rs ecosystem. Each phase has clear success criteria and test examples that demonstrate completion.
 
+> **Note**: The reference bundle now lives at `references/sysmlv2` (in-repo). Older mentions of
+> `sysmlv2-references` in examples should be interpreted as `references/sysmlv2`.
+
 ## Overview
 
 | Phase | Focus | Status | Est. Effort |

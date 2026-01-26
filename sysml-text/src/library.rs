@@ -104,7 +104,7 @@ impl LibraryConfig {
     }
 
     /// Create config from corpus path (for testing).
-    /// The corpus path should be the sysmlv2-references directory.
+    /// The corpus path should be the sysmlv2 references directory (e.g., references/sysmlv2).
     pub fn from_corpus_path(corpus_path: impl Into<PathBuf>) -> Self {
         let corpus = corpus_path.into();
         let library_path = corpus.join("SysML-v2-Pilot-Implementation/org.omg.sysml.xpect.tests");

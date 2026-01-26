@@ -4,7 +4,7 @@
 //! crate's xtext parser. It provides the authoritative list of operators
 //! defined in the SysML v2 specification.
 //!
-//! **Note**: This module requires the sysmlv2-references directory to be available.
+//! **Note**: This module requires the SysML v2 references directory to be available.
 //! Set SYSML_CORPUS_PATH or ensure the references are in a standard location.
 
 use std::path::Path;
@@ -13,7 +13,7 @@ use sysml_codegen::{parse_xtext_operators, OperatorInfo};
 
 use crate::find_references_dir;
 
-/// Path to KerMLExpressions.xtext relative to sysmlv2-references.
+/// Path to KerMLExpressions.xtext relative to the references root.
 pub const KERML_EXPRESSIONS_PATH: &str =
     "SysML-v2-Pilot-Implementation/org.omg.kerml.expressions.xtext/\
      src/org/omg/kerml/expressions/xtext/KerMLExpressions.xtext";
@@ -25,7 +25,7 @@ pub const KERML_EXPRESSIONS_PATH: &str =
 ///
 /// # Arguments
 ///
-/// * `references_path` - Path to the sysmlv2-references directory
+/// * `references_path` - Path to the SysML v2 references directory
 ///
 /// # Returns
 ///
@@ -43,7 +43,7 @@ pub fn load_operators_from_spec(references_path: &Path) -> std::io::Result<Vec<O
 
 /// Load operators from the spec files.
 ///
-/// This function locates the sysmlv2-references directory and loads operators
+/// This function locates the SysML v2 references directory and loads operators
 /// from the KerMLExpressions.xtext file.
 ///
 /// # Panics
@@ -97,7 +97,7 @@ mod tests {
     fn require_spec_files() -> std::path::PathBuf {
         try_find_references_dir().expect(
             "Spec files required for this test. Set SYSML_CORPUS_PATH or \
-             ensure sysmlv2-references is available.",
+             ensure references/sysmlv2 is available.",
         )
     }
 
