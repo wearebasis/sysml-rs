@@ -1,9 +1,8 @@
 [
   "package"
-  "part"
-  "def"
-  "attribute"
   "import"
+  "part"
+  "attribute"
   "action"
   "state"
   "interface"
@@ -12,18 +11,7 @@
   "constraint"
   "enum"
   "type"
-  "item"
-  "unit"
-  "calc"
-  "analysis"
-  "assert"
-  "if"
-  "then"
-  "else"
-  "for"
-  "in"
-  "do"
-  "return"
+  "def"
 ] @keyword
 
 (comment) @comment
