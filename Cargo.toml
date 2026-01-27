@@ -67,7 +67,7 @@ thiserror = "1.0"
 tower-lsp = "0.20"
 axum = "0.7"
 tokio = { version = "1.35", features = ["full"] }
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 walkdir = "2.4"
 rustc-hash = "2.0"
