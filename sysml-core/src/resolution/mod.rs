@@ -1982,6 +1982,16 @@ impl ModelGraph {
 /// # Returns
 ///
 /// A `ResolutionResult` containing statistics and diagnostics.
+///
+/// Resolution is performed in two passes:
+/// 1. **Type relationships pass**: Resolves Specialization, FeatureTyping, and Subclassification
+///    which establish inheritance chains.
+/// 2. **Feature relationships pass**: Resolves Subsetting, Redefinition, etc. which depend on
+///    inherited members being visible through the resolved type hierarchy.
+///
+/// This multi-pass approach ensures that when resolving feature references like `part x :> engine`,
+/// the inheritance chain (e.g., `Car :> Vehicle`) has already been resolved, making inherited
+/// features visible in the scope table.
 pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
     let mut result = ResolutionResult::new();
 
@@ -1993,32 +2003,110 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
         .map(|(id, e)| (id.clone(), e.kind.clone()))
         .collect();
 
-    // Create a resolution context (needs immutable borrow)
-    // We'll resolve references and collect them, then apply updates
-    let mut updates: Vec<(ElementId, String, ElementId)> = Vec::new();
-    let mut unresolved: Vec<(ElementId, String, String)> = Vec::new();
+    // =========================================================================
+    // PASS 1: Resolve type relationships (establishes inheritance chains)
+    // =========================================================================
+    // These must be resolved first so that inherited members become visible
+    // in the scope table for pass 2.
+    let mut pass1_updates: Vec<(ElementId, String, ElementId)> = Vec::new();
+    let mut pass1_unresolved: Vec<(ElementId, String, String)> = Vec::new();
 
     {
-        let ctx_graph = &*graph; // Immutable borrow for context
+        let ctx_graph = &*graph;
         let mut ctx = ResolutionContext::new(ctx_graph);
 
         for (element_id, kind) in &elements_to_resolve {
-            // Get the element's owner for scoping
             let scope_id = ctx_graph
                 .get_element(element_id)
                 .and_then(|e| e.owner.clone())
                 .unwrap_or_else(|| element_id.clone());
 
-            // Get the element to check its properties
             let element = match ctx_graph.get_element(element_id) {
                 Some(e) => e,
                 None => continue,
             };
 
-            // Resolve based on element kind
+            // Pass 1: Only resolve type relationships
+            match kind {
+                // FeatureTyping must come before Specialization (it's a subtype)
+                k if k == &ElementKind::FeatureTyping
+                    || k.is_subtype_of(ElementKind::FeatureTyping) =>
+                {
+                    resolve_feature_typing(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass1_updates,
+                        &mut pass1_unresolved,
+                    );
+                }
+                // Specialization (general type relationship)
+                k if k == &ElementKind::Specialization
+                    || k.is_subtype_of(ElementKind::Specialization) =>
+                {
+                    // Skip subtypes already handled (FeatureTyping, Subsetting, etc.)
+                    // We only want pure Specialization here
+                    if !k.is_subtype_of(ElementKind::Subsetting) {
+                        resolve_specialization(
+                            element,
+                            &scope_id,
+                            &mut ctx,
+                            &mut pass1_updates,
+                            &mut pass1_unresolved,
+                        );
+                    }
+                }
+                // Subclassification (classifier inheritance)
+                k if k == &ElementKind::Subclassification
+                    || k.is_subtype_of(ElementKind::Subclassification) =>
+                {
+                    resolve_subclassification(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass1_updates,
+                        &mut pass1_unresolved,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Apply pass 1 updates to the graph
+    for (element_id, prop_name, resolved_id) in pass1_updates {
+        if let Some(element) = graph.elements.get_mut(&element_id) {
+            element.set_prop(&prop_name, crate::Value::Ref(resolved_id));
+            result.resolved_count += 1;
+        }
+    }
+
+    // =========================================================================
+    // PASS 2: Resolve feature relationships (uses inheritance chains from pass 1)
+    // =========================================================================
+    // Now that Specializations are resolved, inherited members will be visible
+    // in the scope table when resolving Subsetting, Redefinition, etc.
+    let mut pass2_updates: Vec<(ElementId, String, ElementId)> = Vec::new();
+    let mut pass2_unresolved: Vec<(ElementId, String, String)> = Vec::new();
+
+    {
+        let ctx_graph = &*graph;
+        let mut ctx = ResolutionContext::new(ctx_graph);
+
+        for (element_id, kind) in &elements_to_resolve {
+            let scope_id = ctx_graph
+                .get_element(element_id)
+                .and_then(|e| e.owner.clone())
+                .unwrap_or_else(|| element_id.clone());
+
+            let element = match ctx_graph.get_element(element_id) {
+                Some(e) => e,
+                None => continue,
+            };
+
+            // Pass 2: Resolve feature relationships and other cross-references
             // NOTE: Order matters! More specific subtypes must come before more general supertypes.
             // In KerML: Redefinition/ReferenceSubsetting <: Subsetting <: Specialization
-            //           FeatureTyping <: Specialization
             match kind {
                 // Most specific subtypes first
                 k if k == &ElementKind::Redefinition
@@ -2028,8 +2116,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
                 k if k == &ElementKind::ReferenceSubsetting
@@ -2039,55 +2127,31 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
                 k if k == &ElementKind::Subsetting || k.is_subtype_of(ElementKind::Subsetting) => {
-                    resolve_subsetting(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
-                }
-                k if k == &ElementKind::FeatureTyping
-                    || k.is_subtype_of(ElementKind::FeatureTyping) =>
-                {
-                    resolve_feature_typing(
+                    resolve_subsetting(
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
-                    );
-                }
-                // Most general supertype last
-                k if k == &ElementKind::Specialization
-                    || k.is_subtype_of(ElementKind::Specialization) =>
-                {
-                    resolve_specialization(
-                        element,
-                        &scope_id,
-                        &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
                 // Dependency is a separate hierarchy
                 k if k == &ElementKind::Dependency || k.is_subtype_of(ElementKind::Dependency) => {
-                    resolve_dependency(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
-                }
-
-                // === Phase B: Additional cross-reference resolution ===
-
-                // Subclassification (superclassifier)
-                k if k == &ElementKind::Subclassification
-                    || k.is_subtype_of(ElementKind::Subclassification) =>
-                {
-                    resolve_subclassification(
+                    resolve_dependency(
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
+
+                // === Additional cross-reference resolution ===
 
                 // Conjugation (conjugatedType, originalType)
                 k if k == &ElementKind::Conjugation
@@ -2097,8 +2161,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
@@ -2110,19 +2174,31 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
                 // Disjoining (disjoiningType)
                 k if k == &ElementKind::Disjoining || k.is_subtype_of(ElementKind::Disjoining) => {
-                    resolve_disjoining(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_disjoining(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
+                    );
                 }
 
                 // Unioning (unioningType)
                 k if k == &ElementKind::Unioning || k.is_subtype_of(ElementKind::Unioning) => {
-                    resolve_unioning(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_unioning(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
+                    );
                 }
 
                 // Intersecting (intersectingType)
@@ -2133,8 +2209,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
@@ -2146,8 +2222,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
@@ -2159,8 +2235,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
@@ -2172,14 +2248,20 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
                 // Annotation (annotatedElement)
                 k if k == &ElementKind::Annotation || k.is_subtype_of(ElementKind::Annotation) => {
-                    resolve_annotation(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_annotation(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
+                    );
                 }
 
                 // Membership (memberElement) - only for elements that have unresolved memberElement
@@ -2189,7 +2271,13 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                     || k.is_subtype_of(ElementKind::Membership))
                     && element.props.contains_key(unresolved_props::MEMBER_ELEMENT) =>
                 {
-                    resolve_membership(element, &scope_id, &mut ctx, &mut updates, &mut unresolved);
+                    resolve_membership(
+                        element,
+                        &scope_id,
+                        &mut ctx,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
+                    );
                 }
 
                 // ConjugatedPortDefinition (conjugatedPortDefinition)
@@ -2200,8 +2288,8 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
                         element,
                         &scope_id,
                         &mut ctx,
-                        &mut updates,
-                        &mut unresolved,
+                        &mut pass2_updates,
+                        &mut pass2_unresolved,
                     );
                 }
 
@@ -2213,16 +2301,18 @@ pub fn resolve_references(graph: &mut ModelGraph) -> ResolutionResult {
         result.diagnostics = ctx.take_diagnostics();
     }
 
-    // Apply updates to the graph
-    for (element_id, prop_name, resolved_id) in updates {
+    // Apply pass 2 updates to the graph
+    for (element_id, prop_name, resolved_id) in pass2_updates {
         if let Some(element) = graph.elements.get_mut(&element_id) {
             element.set_prop(&prop_name, crate::Value::Ref(resolved_id));
             result.resolved_count += 1;
         }
     }
 
-    // Record unresolved references as diagnostics
-    for (element_id, prop_name, unresolved_name) in unresolved {
+    // Record all unresolved references as diagnostics
+    for (element_id, prop_name, unresolved_name) in
+        pass1_unresolved.into_iter().chain(pass2_unresolved)
+    {
         let diag = build_unresolved_diagnostic(graph, &element_id, &prop_name, &unresolved_name);
         result.diagnostics.push(diag);
         result.unresolved_count += 1;
