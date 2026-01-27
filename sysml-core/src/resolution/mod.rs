@@ -1856,9 +1856,14 @@ impl<'a> ResolutionContext<'a> {
                             .props
                             .get(unresolved_props::TYPE)
                             .and_then(|v| v.as_str())?;
-                        self.resolve_name(type_id, ref_name)
-                            .or_else(|| self.resolve_import_target(ref_name))
-                            .or_else(|| self.resolve_in_library_packages(ref_name))
+                        // Use qualified name resolution for names with ::
+                        if ref_name.contains("::") {
+                            self.resolve_qualified_name(type_id, ref_name)
+                        } else {
+                            self.resolve_name(type_id, ref_name)
+                        }
+                        .or_else(|| self.resolve_import_target(ref_name))
+                        .or_else(|| self.resolve_in_library_packages(ref_name))
                     })
             } else {
                 // Specialization: get the 'general' property
@@ -1871,9 +1876,14 @@ impl<'a> ResolutionContext<'a> {
                             .props
                             .get(unresolved_props::GENERAL)
                             .and_then(|v| v.as_str())?;
-                        self.resolve_name(type_id, ref_name)
-                            .or_else(|| self.resolve_import_target(ref_name))
-                            .or_else(|| self.resolve_in_library_packages(ref_name))
+                        // Use qualified name resolution for names with ::
+                        if ref_name.contains("::") {
+                            self.resolve_qualified_name(type_id, ref_name)
+                        } else {
+                            self.resolve_name(type_id, ref_name)
+                        }
+                        .or_else(|| self.resolve_import_target(ref_name))
+                        .or_else(|| self.resolve_in_library_packages(ref_name))
                     })
             };
 
