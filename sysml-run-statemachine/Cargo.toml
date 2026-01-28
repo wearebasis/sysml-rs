@@ -10,3 +10,7 @@ sysml-run = { workspace = true }
 sysml-core = { workspace = true }
 sysml-query = { workspace = true }
 sysml-span = { workspace = true }
+
+[dev-dependencies]
+sysml-text = { workspace = true }
+sysml-text-pest = { workspace = true }
